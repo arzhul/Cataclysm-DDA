@@ -2,8 +2,9 @@
 
 void active_item_cache::remove( std::list<item>::iterator it, point location )
 {
-    active_items[it->processing_speed()].remove_if( [&] (const item_reference &active_item) {
-            return location == active_item.location && active_item.item_iterator == it; } );
+    active_items[it->processing_speed()].remove_if( [&]( const item_reference & active_item ) {
+        return location == active_item.location && active_item.item_iterator == it;
+    } );
     active_item_set.erase( &*it );
 }
 
@@ -18,7 +19,7 @@ bool active_item_cache::has( std::list<item>::iterator it, point ) const
     return active_item_set.count( &*it ) != 0;
 }
 
-bool active_item_cache::has( item_reference &itm ) const
+bool active_item_cache::has( item_reference const &itm ) const
 {
     return active_item_set.count( itm.item_id ) != 0;
 }

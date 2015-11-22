@@ -10,6 +10,12 @@
 #include "bionics.h"
 #include "mutation.h"
 #include "text_snippets.h"
+#include "rng.h"
+#include "translations.h"
+#include "skill.h"
+#include "addiction.h"
+#include "pldata.h"
+#include "itype.h"
 
 profession::profession()
     : _ident(""), _name_male("null"), _name_female("null"),
@@ -63,7 +69,7 @@ void profession::load_profession(JsonObject &jsobj)
     jsarr = jsobj.get_array("skills");
     while (jsarr.has_more()) {
         JsonObject jo = jsarr.next_object();
-        prof.add_skill(jo.get_string("name"),
+        prof.add_skill(skill_id( jo.get_string("name") ),
                        jo.get_int("level"));
     }
     jsarr = jsobj.get_array("addictions");
@@ -185,22 +191,22 @@ void profession::check_definition() const
     check_item_definitions( _starting_items );
     check_item_definitions( _starting_items_female );
     check_item_definitions( _starting_items_male );
-    for (std::vector<std::string>::const_iterator a = _starting_CBMs.begin(); a != _starting_CBMs.end();
-         ++a) {
-        if (bionics.count(*a) == 0) {
-            debugmsg("bionic %s for profession %s does not exist", a->c_str(), _ident.c_str());
+    for (auto const &a : _starting_CBMs) {
+        if (!is_valid_bionic(a)) {
+            debugmsg("bionic %s for profession %s does not exist", a.c_str(), _ident.c_str());
         }
     }
     
     for( auto &t : _starting_traits ) {
-        if( ::traits.count( t ) == 0 ) {
+        if( !mutation_branch::has( t ) ) {
             debugmsg( "trait %s for profession %s does not exist", t.c_str(), _ident.c_str() );
         }
     }
 
     for( const auto &elem : _starting_skills ) {
-        // Skill::skill shows a debug message if the skill is unknown
-        Skill::skill( elem.first );
+        if( !elem.first.is_valid() ) {
+            debugmsg( "skill %s for profession %s does not exist", elem.first.c_str(), _ident.c_str() );
+        }
     }
 }
 
@@ -250,7 +256,7 @@ void profession::add_addiction(add_type type, int intensity)
 {
     _starting_addictions.push_back(addiction(type, intensity));
 }
-void profession::add_skill(const std::string &skill_name, const int level)
+void profession::add_skill(const skill_id &skill_name, const int level)
 {
     _starting_skills.push_back(StartingSkill(skill_name, level));
 }

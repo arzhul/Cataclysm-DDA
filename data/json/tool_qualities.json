@@ -4,17 +4,17 @@
         "id" : "CUT",
         "name" : "cutting"
     },{
-    	"type" : "tool_quality",
-	"id" : "GLARE",
-	"name" : "glare protection"
+        "type" : "tool_quality",
+        "id" : "GLARE",
+        "name" : "glare protection"
     },{
-    	"type" : "tool_quality",
-	"id" : "SMOOTH",
-	"name" : "smoothing"
+        "type" : "tool_quality",
+        "id" : "SMOOTH",
+        "name" : "smoothing"
     },{
-	"type" : "tool_quality",
-	"id" : "WELD",
-	"name" : "welding"
+        "type" : "tool_quality",
+        "id" : "WELD",
+        "name" : "welding"
     },{
         "type" : "tool_quality",
         "id" : "HAMMER",
@@ -51,6 +51,10 @@
         "type" : "tool_quality",
         "id" : "CHEM",
         "name" : "chemical making"
+    },{
+        "type" : "tool_quality",
+        "id" : "SMOKE_PIPE",
+        "name" : "smoking"
     },{
         "type" : "tool_quality",
         "id" : "BREW",

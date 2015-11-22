@@ -1,11 +1,80 @@
 #ifndef ENUMS_H
 #define ENUMS_H
 
+#include <climits>
+#include <cassert>
+
 #include "json.h" // (de)serialization for points
 
 #ifndef sgn
-#define sgn(x) (((x) < 0) ? -1 : 1)
+#define sgn(x) (((x) < 0) ? -1 : (((x)>0) ? 1 : 0))
 #endif
+
+// By default unordered_map doesn't have a hash for tuple or pairs, so we need to include some.
+// This is taken almost directly from the boost library code.
+// Function has to live in the std namespace
+// so that it is picked up by argument-dependent name lookup (ADL).
+namespace std{
+    namespace
+    {
+
+        // Code from boost
+        // Reciprocal of the golden ratio helps spread entropy
+        //     and handles duplicates.
+        // See Mike Seymour in magic-numbers-in-boosthash-combine:
+        //     http://stackoverflow.com/questions/4948780
+
+        template <class T>
+        inline void hash_combine(std::size_t& seed, T const& v)
+        {
+            seed ^= hash<T>()(v) + 0x9e3779b9 + (seed<<6) + (seed>>2);
+        }
+
+        // Recursive template code derived from Matthieu M.
+        template <class Tuple, size_t Index = std::tuple_size<Tuple>::value - 1>
+        struct HashValueImpl
+        {
+            static void apply(size_t& seed, Tuple const& tuple)
+            {
+                HashValueImpl<Tuple, Index-1>::apply(seed, tuple);
+                hash_combine(seed, get<Index>(tuple));
+            }
+        };
+
+        template <class Tuple>
+        struct HashValueImpl<Tuple,0>
+        {
+            static void apply(size_t& seed, Tuple const& tuple)
+            {
+                hash_combine(seed, get<0>(tuple));
+            }
+        };
+    }
+
+    template <typename ... TT>
+    struct hash<std::tuple<TT...>>
+    {
+        size_t
+        operator()(std::tuple<TT...> const& tt) const
+        {
+            size_t seed = 0;
+            HashValueImpl<std::tuple<TT...> >::apply(seed, tt);
+            return seed;
+        }
+
+    };
+
+    template <class A, class B>
+    struct hash<std::pair<A, B>>
+    {
+        std::size_t operator() (const std::pair<A, B>& v) const {
+            std::size_t seed = 0;
+            hash_combine(seed, v.first);
+            hash_combine(seed, v.second);
+            return seed;
+        }
+    };
+}
 
 enum special_game_id {
     SGAME_NULL = 0,
@@ -14,7 +83,7 @@ enum special_game_id {
     NUM_SPECIAL_GAMES
 };
 
-enum art_effect_passive {
+enum art_effect_passive : int {
     AEP_NULL = 0,
     // Good
     AEP_STR_UP, // Strength + 4
@@ -82,18 +151,6 @@ enum artifact_natural_property {
     ARTPROP_MAX
 };
 
-// for use in category specific inventory lists
-enum item_cat {
-    IC_NULL = 0,
-    IC_COMESTIBLE,
-    IC_AMMO,
-    IC_ARMOR,
-    IC_GUN,
-    IC_BOOK,
-    IC_TOOL,
-    IC_CONTAINER
-};
-
 enum phase_id {
     PNULL, SOLID, LIQUID, GAS, PLASMA
 };
@@ -119,14 +176,15 @@ enum object_type {
 struct point : public JsonSerializer, public JsonDeserializer {
     int x;
     int y;
-    point(int X = 0, int Y = 0) : x (X), y (Y) {}
+    point() : x(0), y(0) {}
+    point(int X, int Y) : x (X), y (Y) {}
     point(point &&) = default;
     point(const point &) = default;
     point &operator=(point &&) = default;
     point &operator=(const point &) = default;
     ~point() {}
     using JsonSerializer::serialize;
-    void serialize(JsonOut &jsout) const
+    void serialize(JsonOut &jsout) const override
     {
         jsout.start_array();
         jsout.write(x);
@@ -134,7 +192,7 @@ struct point : public JsonSerializer, public JsonDeserializer {
         jsout.end_array();
     }
     using JsonDeserializer::deserialize;
-    void deserialize(JsonIn &jsin)
+    void deserialize(JsonIn &jsin) override
     {
         JsonArray ja = jsin.get_array();
         x = ja.get_int(0);
@@ -148,6 +206,16 @@ struct point : public JsonSerializer, public JsonDeserializer {
     {
         x += rhs.x;
         y += rhs.y;
+        return *this;
+    }
+    point operator-(const point &rhs) const
+    {
+        return point( x - rhs.x, y - rhs.y );
+    }
+    point &operator-=(const point &rhs)
+    {
+        x -= rhs.x;
+        y -= rhs.y;
         return *this;
     }
 };
@@ -177,11 +245,75 @@ inline bool operator!=(const point &a, const point &b)
     return !(a == b);
 }
 
-struct tripoint {
+struct tripoint : public JsonSerializer, public JsonDeserializer {
     int x;
     int y;
     int z;
-    tripoint(int X = 0, int Y = 0, int Z = 0) : x (X), y (Y), z (Z) {}
+    tripoint() : x(0), y(0), z(0) {}
+    tripoint(int X, int Y, int Z) : x (X), y (Y), z (Z) {}
+    tripoint(tripoint &&) = default;
+    tripoint(const tripoint &) = default;
+    tripoint &operator=(tripoint &&) = default;
+    tripoint &operator=(const tripoint &) = default;
+    explicit tripoint(const point &p, int Z) : x (p.x), y (p.y), z (Z) {}
+    ~tripoint() {}
+    using JsonSerializer::serialize;
+    void serialize(JsonOut &jsout) const override
+    {
+        jsout.start_array();
+        jsout.write(x);
+        jsout.write(y);
+        jsout.write(z);
+        jsout.end_array();
+    }
+    using JsonDeserializer::deserialize;
+    void deserialize(JsonIn &jsin) override
+    {
+        JsonArray ja = jsin.get_array();
+        x = ja.get_int(0);
+        y = ja.get_int(1);
+        z = ja.get_int(2);
+    }
+    tripoint operator+(const tripoint &rhs) const
+    {
+        return tripoint( x + rhs.x, y + rhs.y, z + rhs.z );
+    }
+    tripoint operator-(const tripoint &rhs) const
+    {
+        return tripoint( x - rhs.x, y - rhs.y, z - rhs.z );
+    }
+    tripoint &operator+=(const tripoint &rhs)
+    {
+        x += rhs.x;
+        y += rhs.y;
+        z += rhs.z;
+        return *this;
+    }
+    tripoint operator-() const
+    {
+        return tripoint( -x, -y, -z );
+    }
+    /*** some point operators and functions ***/
+    tripoint operator+(const point &rhs) const
+    {
+        return tripoint(x + rhs.x, y + rhs.y, z);
+    }
+    tripoint operator-(const point &rhs) const
+    {
+        return tripoint(x - rhs.x, y - rhs.y, z);
+    }
+    tripoint &operator+=(const point &rhs)
+    {
+        x += rhs.x;
+        y += rhs.y;
+        return *this;
+    }
+    tripoint &operator-=(const point &rhs)
+    {
+        x -= rhs.x;
+        y -= rhs.y;
+        return *this;
+    }
 };
 
 // Make tripoint hashable so it can be used as an unordered_set or unordered_map key,
@@ -219,5 +351,8 @@ inline bool operator<(const tripoint &a, const tripoint &b)
     }
     return false;
 }
+
+static const tripoint tripoint_min { INT_MIN, INT_MIN, INT_MIN };
+static const tripoint tripoint_zero { 0, 0, 0 };
 
 #endif

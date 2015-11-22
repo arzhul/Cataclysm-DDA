@@ -5,6 +5,7 @@
 #include <cstring>
 #include <cerrno>
 #include <cstddef>
+#include <cstdio>
 #include <string>
 #include <vector>
 #include <deque>
@@ -30,7 +31,7 @@
 // HACK: mingw only issue as of 14/01/2015
 // TODO: move elsewhere
 //--------------------------------------------------------------------------------------------------
-#ifdef __MINGW32__
+#if (defined __MINGW32__ || defined __CYGWIN__)
 size_t strnlen(const char *const start, size_t const maxlen)
 {
     auto const end = reinterpret_cast<const char*>(memchr(start, '\0', maxlen));
@@ -263,6 +264,33 @@ std::vector<std::string> get_files_from_path(std::string const &pattern,
     return find_file_if_bfs(root_path, recurse, [&](dirent const &entry, bool) {
         return name_contains(entry, pattern, match_extension);
     });
+}
+
+/** Find directories which containing pattern.
+  * @param pattern Search pattern.
+  * @param root_path Search root.
+  * @param recurse Be recurse or not.
+  * @return vector or directories without pattern filename at end.
+  */
+std::vector<std::string> get_directories_with(std::string const &pattern,
+    std::string const &root_path, bool const recurse)
+{
+    if (pattern.empty()) {
+        return std::vector<std::string>();
+    }
+
+    auto files = find_file_if_bfs(root_path, recurse, [&](dirent const &entry, bool) {
+        return name_contains(entry, pattern, true);
+    });
+
+    // Chop off the file names. Dir path MUST be splitted by '/'
+    for (auto &file : files) {
+        file.erase(file.rfind('/'), std::string::npos);
+    }
+
+    files.erase(std::unique(std::begin(files), std::end(files)), std::end(files));
+
+    return files;
 }
 
 //--------------------------------------------------------------------------------------------------
