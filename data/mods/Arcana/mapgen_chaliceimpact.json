@@ -41,7 +41,7 @@
         "id": "chalice_cult_casualty_special",
         "entries":
         [
-            { "group": "underwear", "damage": [1, 4]}, 
+            { "group": "underwear", "damage": [1, 4]},
             { "group": "shirts", "damage": [1, 4]},
             { "group": "pants", "damage": [1, 4]},
             { "group": "shoes", "damage": [1, 4]},
@@ -54,7 +54,7 @@
         "id": "chalice_cult_casualties",
         "entries":
         [
-            { "group": "underwear", "damage": [1, 4]}, 
+            { "group": "underwear", "damage": [1, 4]},
             { "group": "shirts", "damage": [1, 4]},
             { "group": "pants", "damage": [1, 4]},
             { "group": "shoes", "damage": [1, 4]},
@@ -157,6 +157,9 @@
             "/": "t_open_air",
             ">": "t_stairs_down"
             },
+            "add": [
+                { "item": "note_chalice",  "x": [8, 15], "y": [8, 15], "amount":1 }
+            ],
             "set": [
                 { "point": "trap", "id": "tr_glow", "x": [ 4, 10 ], "y": [ 2, 3 ], "repeat": [ 2, 6 ] },
                 { "point": "trap", "id": "tr_hum", "x": [ 13, 19 ], "y": [ 20, 21 ], "repeat": [ 2, 6 ] }

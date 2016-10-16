@@ -4,13 +4,12 @@
 #include "player.h"
 #include "debug.h"
 #include "output.h"
-#include "mapsharing.h"
+#include "cata_utility.h"
 #include "translations.h"
 #include "worldfactory.h"
 #include "catacharset.h"
 #include "ui.h"
 #include <iostream>
-#include <fstream>
 
 zone_manager::zone_manager()
 {
@@ -180,23 +179,9 @@ bool zone_manager::save_zones()
     std::string savefile = world_generator->active_world->world_path + "/" + base64_encode(
                                g->u.name ) + ".zones.json";
 
-    try {
-        std::ofstream fout;
-        fout.exceptions( std::ios::badbit | std::ios::failbit );
-
-        fopen_exclusive( fout, savefile.c_str() );
-        if( !fout.is_open() ) {
-            return true; //trick game into thinking it was saved
-        }
-
+    return write_to_file_exclusive( savefile, [&]( std::ostream & fout ) {
         fout << serialize();
-        fclose_exclusive( fout, savefile.c_str() );
-        return true;
-
-    } catch( std::ios::failure & ) {
-        popup( _( "Failed to save zones to %s" ), savefile.c_str() );
-        return false;
-    }
+    }, _( "zones date" ) );
 }
 
 void zone_manager::load_zones()
@@ -204,22 +189,10 @@ void zone_manager::load_zones()
     std::string savefile = world_generator->active_world->world_path + "/" + base64_encode(
                                g->u.name ) + ".zones.json";
 
-    std::ifstream fin;
-    fin.open( savefile.c_str(), std::ifstream::in | std::ifstream::binary );
-    if( !fin.good() ) {
-        fin.close();
-        cache_data();
-        return;
-    }
-
-    try {
+    read_from_file_optional( savefile, [&]( std::istream & fin ) {
         JsonIn jsin( fin );
         deserialize( jsin );
-    } catch( const JsonError &e ) {
-        DebugLog( D_ERROR, DC_ALL ) << "load_zones: " << e;
-    }
-
-    fin.close();
+    } );
 
     cache_data();
 }

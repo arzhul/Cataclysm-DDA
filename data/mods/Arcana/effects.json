@@ -67,7 +67,7 @@
         "name": ["Elixir"],
         "desc": ["Not immortality, but it still feels nice."],
         "remove_message": "The healing effect fades.",
-        "removes_effects": ["infected", "bite", "bleed", "fungus", "dermatik", "winded"],
+        "removes_effects": ["infected", "bite", "bleed", "common_cold", "flu", "tetanus"],
         "max_duration": 150,
         "base_mods": {
             "pkill_tick": [3],
@@ -101,7 +101,7 @@
             "fatigue_chance": [1, 6]
         }
     },{
-        "//": "Will be relevent once cleric ring is obtainable.",
+        "//": "Will be relevant once cleric ring is obtainable.",
         "type": "effect_type",
         "id": "cleric_warding",
         "name": ["Ward Against Evil"],

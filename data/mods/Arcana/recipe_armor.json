@@ -8,16 +8,11 @@
   "skills_required": [ "tailor", 3 ],
   "difficulty": 5,
   "time": 30000,
-  "reversible": false,
-  "autolearn": false,
   "book_learn": [[ "book_hexenhammer", 5 ]],
-  "qualities":[{"id":"HAMMER","level":2,"amount":1}],
+  "qualities":[{"id":"HAMMER","level":2}],
   "tools": [
     [ ["book_hexenhammer", -1] ],
     [
-      [ "needle_bone", 18 ],
-      [ "needle_wood", 18 ],
-      [ "tailors_kit", 18 ],
       [ "sewing_kit", 18 ]
     ]
   ],
@@ -36,19 +31,14 @@
   "skills_required": [ "tailor", 3 ],
   "difficulty": 6,
   "time": 25000,
-  "reversible": false,
-  "autolearn": false,
   "book_learn": [[ "book_hexenhammer", 6 ]],
   "qualities":[
-    {"id":"HAMMER","level":2,"amount":1},
-    {"id":"CUT","level":1,"amount":1}
+    {"id":"HAMMER","level":2},
+    {"id":"CUT","level":1}
   ],
   "tools": [
     [ ["book_hexenhammer", -1] ],
     [
-      [ "needle_bone", 9 ],
-      [ "needle_wood", 9 ],
-      [ "tailors_kit", 9 ],
       [ "sewing_kit", 9 ]
     ]
   ],
@@ -67,21 +57,17 @@
   "skills_required": [ "tailor", 3 ],
   "difficulty": 4,
   "time": 25000,
-  "reversible": false,
-  "autolearn": false,
   "book_learn": [[ "book_bloodmagic", 4 ]],
   "tools": [
     [ ["book_bloodmagic", -1] ],
     [ ["blood_athame", -1] ],
     [
-      [ "needle_bone", 18 ],
-      [ "needle_wood", 18 ],
-      [ "tailors_kit", 18 ],
-      [ "sewing_kit", 18 ]
+      [ "sewing_kit", 22 ]
     ]
   ],
   "components": [
     [ [ "armor_larmor", 1 ] ],
+    [ [ "armguard_larmor", 1 ] ],
     [ [ "brooch", 1 ] ],
     [
       [ "acid", 1 ],
@@ -99,10 +85,8 @@
   "skills_required": [ "fabrication", 3 ],
   "difficulty": 5,
   "time": 15000,
-  "reversible": false,
-  "autolearn": false,
   "book_learn": [[ "book_bloodmagic", 5 ]],
-  "qualities":[{"id":"HAMMER","level":3,"amount":1}],
+  "qualities":[{"id":"HAMMER","level":3}],
   "tools": [
     [ [ "book_bloodmagic", -1 ] ],
     [ [ "tongs", -1 ] ],
@@ -111,7 +95,6 @@
     [ [ "swage", -1 ] ],
     [
       [ "forge", 300],
-      [ "char_forge", 60],
       [ "oxy_torch", 60]
     ]
   ],
@@ -129,10 +112,8 @@
   "skills_required": [ "fabrication", 3 ],
   "difficulty": 6,
   "time": 30000,
-  "reversible": false,
-  "autolearn": false,
   "book_learn": [[ "book_sacrifice", 6 ]],
-  "qualities":[{"id":"HAMMER","level":3,"amount":1}],
+  "qualities":[{"id":"HAMMER","level":3}],
   "tools": [
     [ [ "book_sacrifice", -1 ] ],
     [ [ "tongs", -1 ] ],
@@ -141,7 +122,6 @@
     [ [ "swage", -1 ] ],
     [
       [ "forge", 150],
-      [ "char_forge", 30],
       [ "oxy_torch", 30]
     ]
   ],
@@ -162,16 +142,11 @@
   "skills_required": [ "tailor", 5 ],
   "difficulty": 7,
   "time": 80000,
-  "reversible": false,
-  "autolearn": false,
   "book_learn": [[ "book_sacrifice", 7 ]],
-  "qualities":[{"id":"CUT","level":1,"amount":1}],
+  "qualities":[{"id":"CUT","level":1}],
   "tools": [
     [ [ "book_sacrifice", -1 ] ],
     [
-      [ "needle_bone", 24 ],
-      [ "needle_wood", 24 ],
-      [ "tailors_kit", 24 ],
       [ "sewing_kit", 24 ]
     ]
   ],
@@ -184,7 +159,7 @@
       [ "kariginu", 1 ]
     ],
     [ [ "fur", 4 ] ],
-    [ [ "charcoal", 6 ] ],
+    [ [ "charcoal", 30 ] ],
     [
       [ "essence", 7 ],
       [ "essence_blood", 21 ]

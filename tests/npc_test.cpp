@@ -2,8 +2,10 @@
 
 #include "player.h"
 #include "npc.h"
+#include "npc_class.h"
 #include "game.h"
 #include "map.h"
+#include "text_snippets.h"
 
 #include <string>
 
@@ -18,19 +20,19 @@ void on_load_test( npc &who, calendar from, calendar to )
 void sane( const npc &who )
 {
     CHECK( who.get_hunger() >= 0 );
-    CHECK( who.thirst >= 0 );
-    CHECK( who.fatigue >= -25 );
+    CHECK( who.get_thirst() >= 0 );
+    CHECK( who.get_fatigue() >= -25 );
 }
 
 npc create_model()
 {
     npc model_npc;
     model_npc.normalize();
-    model_npc.randomize();
+    model_npc.randomize( NC_NONE );
     model_npc.set_hunger( 0 );
-    model_npc.thirst = 0;
-    model_npc.fatigue = 0;
-    model_npc.remove_effect( "sleep" );
+    model_npc.set_thirst( 0 );
+    model_npc.set_fatigue( 0 );
+    model_npc.remove_effect( efftype_id( "sleep" ) );
     // An ugly hack to prevent NPC falling asleep during testing due to massive fatigue
     model_npc.set_mutation( "WEB_WEAVER" );
     return model_npc;
@@ -48,11 +50,11 @@ TEST_CASE("on_load-sane-values")
 
         const int margin = 1;
         CHECK( test_npc.get_hunger() <= five_min_ticks + margin );
-        CHECK( test_npc.thirst <= five_min_ticks + margin );
-        CHECK( test_npc.fatigue <= five_min_ticks + margin );
+        CHECK( test_npc.get_thirst() <= five_min_ticks + margin );
+        CHECK( test_npc.get_fatigue() <= five_min_ticks + margin );
         CHECK( test_npc.get_hunger() >= five_min_ticks - margin );
-        CHECK( test_npc.thirst >= five_min_ticks - margin );
-        CHECK( test_npc.fatigue >= five_min_ticks - margin );
+        CHECK( test_npc.get_thirst() >= five_min_ticks - margin );
+        CHECK( test_npc.get_fatigue() >= five_min_ticks - margin );
     }
 
     SECTION("Awake for 2 days, gaining hunger/thirst/fatigue") {
@@ -62,17 +64,17 @@ TEST_CASE("on_load-sane-values")
 
         const int margin = 10;
         CHECK( test_npc.get_hunger() <= five_min_ticks + margin );
-        CHECK( test_npc.thirst <= five_min_ticks + margin );
-        CHECK( test_npc.fatigue <= five_min_ticks + margin );
+        CHECK( test_npc.get_thirst() <= five_min_ticks + margin );
+        CHECK( test_npc.get_fatigue() <= five_min_ticks + margin );
         CHECK( test_npc.get_hunger() >= five_min_ticks - margin );
-        CHECK( test_npc.thirst >= five_min_ticks - margin );
-        CHECK( test_npc.fatigue >= five_min_ticks - margin );
+        CHECK( test_npc.get_thirst() >= five_min_ticks - margin );
+        CHECK( test_npc.get_fatigue() >= five_min_ticks - margin );
     }
 
     SECTION("Sleeping for 6 hours, gaining hunger/thirst (not testing fatigue due to lack of effects processing)") {
         npc test_npc = model_npc;
-        test_npc.add_effect( "sleep", HOURS(6) );
-        test_npc.fatigue = 1000;
+        test_npc.add_effect( efftype_id( "sleep" ), HOURS(6) );
+        test_npc.set_fatigue(1000);
         const int five_min_ticks = 12 * 6;
         const float expected_rate = 0.5f;
         const int expected_change = five_min_ticks * expected_rate;
@@ -86,10 +88,10 @@ TEST_CASE("on_load-sane-values")
 
         const int margin = 10;
         CHECK( test_npc.get_hunger() <= expected_change + margin );
-        CHECK( test_npc.thirst <= expected_change + margin );
+        CHECK( test_npc.get_thirst() <= expected_change + margin );
         //CHECK( test_npc.fatigue <= 1000 - expected_fatigue_change + margin );
         CHECK( test_npc.get_hunger() >= expected_change - margin );
-        CHECK( test_npc.thirst >= expected_change - margin );
+        CHECK( test_npc.get_thirst() >= expected_change - margin );
         //CHECK( test_npc.fatigue >= 1000 - expected_fatigue_change - margin );
     }
 }
@@ -109,11 +111,11 @@ TEST_CASE("on_load-similar-to-per-turn")
 
         const int margin = 1;
         CHECK( on_load_npc.get_hunger() <= iterated_npc.get_hunger() + margin );
-        CHECK( on_load_npc.thirst <= iterated_npc.thirst + margin );
-        CHECK( on_load_npc.fatigue <= iterated_npc.fatigue + margin );
+        CHECK( on_load_npc.get_thirst() <= iterated_npc.get_thirst() + margin );
+        CHECK( on_load_npc.get_fatigue() <= iterated_npc.get_fatigue() + margin );
         CHECK( on_load_npc.get_hunger() >= iterated_npc.get_hunger() - margin );
-        CHECK( on_load_npc.thirst >= iterated_npc.thirst - margin );
-        CHECK( on_load_npc.fatigue >= iterated_npc.fatigue - margin );
+        CHECK( on_load_npc.get_thirst() >= iterated_npc.get_thirst() - margin );
+        CHECK( on_load_npc.get_fatigue() >= iterated_npc.get_fatigue() - margin );
     }
 
     SECTION("Awake for 6 hours, gaining hunger/thirst/fatigue") {
@@ -127,10 +129,52 @@ TEST_CASE("on_load-similar-to-per-turn")
 
         const int margin = 10;
         CHECK( on_load_npc.get_hunger() <= iterated_npc.get_hunger() + margin );
-        CHECK( on_load_npc.thirst <= iterated_npc.thirst + margin );
-        CHECK( on_load_npc.fatigue <= iterated_npc.fatigue + margin );
+        CHECK( on_load_npc.get_thirst() <= iterated_npc.get_thirst() + margin );
+        CHECK( on_load_npc.get_fatigue() <= iterated_npc.get_fatigue() + margin );
         CHECK( on_load_npc.get_hunger() >= iterated_npc.get_hunger() - margin );
-        CHECK( on_load_npc.thirst >= iterated_npc.thirst - margin );
-        CHECK( on_load_npc.fatigue >= iterated_npc.fatigue - margin );
+        CHECK( on_load_npc.get_thirst() >= iterated_npc.get_thirst() - margin );
+        CHECK( on_load_npc.get_fatigue() >= iterated_npc.get_fatigue() - margin );
     }
+}
+
+TEST_CASE("snippet-tag-test")
+{
+    // Actually used tags
+    static const std::set<std::string> npc_talk_tags = {{
+        "<name_b>", "<thirsty>", "<swear!>",
+        "<sad>", "<greet>", "<no>",
+        "<im_leaving_you>", "<ill_kill_you>", "<ill_die>",
+        "<wait>", "<no_faction>", "<name_g>",
+        "<keep_up>", "<yawn>", "<very>",
+        "<okay>", "<catch_up>", "<really>",
+        "<let_me_pass>", "<done_mugging>", "<happy>",
+        "<drop_weapon>", "<swear>", "<lets_talk>",
+        "<hands_up>", "<move>", "<hungry>",
+        "<fuck_you>",
+    }};
+
+    for( const auto &tag : npc_talk_tags ) {
+        const auto ids = SNIPPET.all_ids_from_category( tag );
+        std::set<std::string> valid_snippets;
+        for( int id : ids ) {
+            const auto snip = SNIPPET.get( id );
+            valid_snippets.insert( snip );
+        }
+
+        // We want to get all the snippets in the category
+        std::set<std::string> found_snippets;
+        // Brute force random snippets to see if they are all in their category
+        for( size_t i = 0; i < ids.size() * 100; i++ ) {
+            const auto &roll = SNIPPET.random_from_category( tag );
+            CHECK( valid_snippets.count( roll ) > 0 );
+            found_snippets.insert( roll );
+        }
+
+        CHECK( found_snippets == valid_snippets );
+    }
+
+    // Special tags, those should have empty replacements
+    CHECK( SNIPPET.all_ids_from_category( "<yrwp>" ).empty() );
+    CHECK( SNIPPET.all_ids_from_category( "<mywp>" ).empty() );
+    CHECK( SNIPPET.all_ids_from_category( "<ammo>" ).empty() );
 }

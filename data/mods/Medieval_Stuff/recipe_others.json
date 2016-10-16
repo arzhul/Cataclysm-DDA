@@ -6,15 +6,14 @@
   "subcategory": "CSC_OTHER_MATERIALS",
   "skill_used": "fabrication",
   "difficulty": 2,
-  "time": 5000,
-  "reversible": false,
+  "time": 10000,
+  "batch_time_factors": [ 90, 4 ],
   "autolearn": true,
   "tools": [
     [ [ "tongs", -1 ] ],
     [ [ "crucible", -1 ] ],
     [
       [ "forge", 50 ],
-      [ "char_forge", 10 ],
       [ "oxy_torch", 10 ]
     ]
   ],

@@ -7,7 +7,9 @@
 #include "inventory.h"
 #include "output.h"
 #include "player.h"
+#include "requirements.h"
 #include "translations.h"
+#include "crafting.h"
 
 #include <list>
 #include <sstream>
@@ -40,7 +42,7 @@ void craft_command::execute()
 
     bool need_selections = true;
     inventory map_inv;
-    map_inv.form_from_map( crafter->pos3(), PICKUP_RANGE );
+    map_inv.form_from_map( crafter->pos(), PICKUP_RANGE );
 
     if( has_cached_selections() ) {
         std::vector<comp_selection<item_comp>> missing_items = check_item_components_missing( map_inv );
@@ -54,16 +56,39 @@ void craft_command::execute()
         }
     }
 
+    const auto needs = rec->requirements();
+
     if( need_selections ) {
-        select_components( map_inv );
+        item_selections.clear();
+        for( const auto &it : needs.get_components() ) {
+            comp_selection<item_comp> is = crafter->select_item_component( it, batch_size, map_inv, true );
+            if( is.use_from == cancel ) {
+                return;
+            }
+            item_selections.push_back( is );
+        }
+
+        tool_selections.clear();
+        for( const auto &it : needs.get_tools() ) {
+            comp_selection<tool_comp> ts = crafter->select_tool_component(
+                                               it, batch_size, map_inv, DEFAULT_HOTKEYS, true );
+            if( ts.use_from == cancel ) {
+                return;
+            }
+            tool_selections.push_back( ts );
+        }
     }
 
-    crafter->assign_activity( is_long ? ACT_LONGCRAFT : ACT_CRAFT, rec->batch_time( batch_size ),
-                              rec->id );
-    crafter->activity.values.push_back( batch_size );
+    auto activity = player_activity( is_long ? ACT_LONGCRAFT : ACT_CRAFT,
+                                     rec->batch_time( batch_size ),
+                                     -1, INT_MIN, rec->ident() );
+    activity.values.push_back( batch_size );
+
+    crafter->assign_activity( activity );
+
     /* legacy support for lua bindings to last_batch and lastrecipe */
     crafter->last_batch = batch_size;
-    crafter->lastrecipe = rec->ident;
+    crafter->lastrecipe = rec->ident();
 }
 
 /** Does a string join with ', ' of the components in the passed vector and inserts into 'str' */
@@ -71,32 +96,10 @@ template<typename T>
 static void component_list_string( std::stringstream &str,
                                    const std::vector<comp_selection<T>> &components )
 {
-    for( size_t i = 0; i < components.size(); i++ ) {
-        if( i != 0 ) {
-            str << ", ";
-        }
-        str << components[i].nname();
-    }
-}
-
-void craft_command::select_components( inventory &map_inv )
-{
-    for( const auto &it : rec->requirements.components ) {
-        comp_selection<item_comp> is = crafter->select_item_component( it, batch_size, map_inv, true );
-        if( is.use_from == cancel ) {
-            return;
-        }
-        item_selections.push_back( is );
-    }
-
-    for( const auto &it : rec->requirements.tools ) {
-        comp_selection<tool_comp> ts = crafter->select_tool_component(
-                                           it, batch_size, map_inv, DEFAULT_HOTKEYS, true );
-        if( ts.use_from == cancel ) {
-            return;
-        }
-        tool_selections.push_back( ts );
-    }
+    str << enumerate_as_string( components.begin(), components.end(),
+    []( const comp_selection<T> &comp ) {
+        return comp.nname();
+    } );
 }
 
 bool craft_command::query_continue( const std::vector<comp_selection<item_comp>> &missing_items,
@@ -128,9 +131,20 @@ bool craft_command::query_continue( const std::vector<comp_selection<item_comp>>
 std::list<item> craft_command::consume_components()
 {
     std::list<item> used;
+    if( crafter->has_trait( "DEBUG_HS" ) ) {
+        return used;
+    }
 
     if( empty() ) {
         debugmsg( "Warning: attempted to consume items from an empty craft_command" );
+        return used;
+    }
+
+    inventory map_inv;
+    map_inv.form_from_map( crafter->pos(), PICKUP_RANGE );
+
+    if( !check_item_components_missing( map_inv ).empty() ) {
+        debugmsg( "Aborting crafting: couldn't find cached components" );
         return used;
     }
 
@@ -230,7 +244,7 @@ std::vector<comp_selection<tool_comp>> craft_command::check_tool_components_miss
                 case cancel:
                     break;
             }
-        } else if( crafter->has_amount( type, 1 ) || map_inv.has_tools( type, 1 ) ) {
+        } else if( !crafter->has_amount( type, 1 ) && !map_inv.has_tools( type, 1 ) ) {
             missing.push_back( tool_sel );
         }
     }

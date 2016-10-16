@@ -6,7 +6,7 @@
     "name": "No Energy Weapons",
     "author": "Rivet-the-Zombie",
     "description": "Removes energy weapons, coilguns, and specific ammunition.",
-    "category": "exclude",
+    "category": "item_exclude",
     "path": "modinfo.json"
 },{
     "type": "ITEM_BLACKLIST",
@@ -14,7 +14,6 @@
         "v29",
         "cerberus_laser",
         "ftk93",
-        "nx17",
         "coilgun",
         "hk_g80",
         "plasma_rifle",
@@ -22,7 +21,6 @@
         "laser_rifle",
         "unbio_blaster_gun",
         "rebar_rifle",
-        "laser_capacitor",
         "laser_pack",
         "12mm",
         "rebar_rail",

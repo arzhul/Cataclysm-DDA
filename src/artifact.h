@@ -58,7 +58,7 @@ enum art_charge : int {
 
 /* CLASSES */
 
-class it_artifact_tool : public it_tool, public JsonSerializer, public JsonDeserializer
+class it_artifact_tool : public itype, public JsonSerializer, public JsonDeserializer
 {
     public:
         using JsonSerializer::serialize;
@@ -105,7 +105,6 @@ std::string architects_cube();
 
 // note: needs to be called by main() before MAPBUFFER.load
 void load_artifacts( const std::string &filename );
-void load_artifacts_from_ifstream( std::ifstream &f );
 // save artifact definitions to json, path must be the same as for loading.
 bool save_artifacts( const std::string &path );
 

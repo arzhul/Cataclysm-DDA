@@ -60,12 +60,14 @@ Given you're building from source you have a number of choices to make:
 
   * `NATIVE=` - you should only care about this if you're cross-compiling
   * `RELEASE=1` - without this you'll get a debug build (see note below)
+  * `LTO=1` - enables link-time optimization with GCC/Clang
   * `TILES=1` - with this you'll get the tiles version, without it the curses version
   * `SOUND=1` - if you want sound; this requires `TILES=1`
   * `LOCALIZE=0` - this disables localizations so `gettext` is not needed
   * `LUA=1` - this enables Lua support; needed only for full-fledged mods
   * `CLANG=1` - use Clang instead of GCC
-  * `CACHE=1` - use ccache
+  * `CCACHE=1` - use ccache
+  * `USE_LIBCXX=1` - use libc++ instead of libstdc++ with Clang (default on OS X)
 
 There is a couple of other possible options - feel free to read the `Makefile`.
 
@@ -221,7 +223,7 @@ For most people, the simple Homebrew installation is enough. For developers, her
 
 ### SDL
 
-SDL2, SDL2_image, and SDL2_ttf are needed for the tiles build. Cataclysm can be built using either the SDL framework, or shared libraries built from source.
+SDL2, SDL2_image, and SDL2_ttf are needed for the tiles build. Optionally, you can add SDL2_mixer for sound support. Cataclysm can be built using either the SDL framework, or shared libraries built from source.
 
 The SDL framework files can be downloaded here:
 
@@ -232,15 +234,29 @@ The SDL framework files can be downloaded here:
 Copy `SDL2.framework`, `SDL2_image.framework`, and `SDL2_ttf.framework`
 to `/Library/Frameworks` or `/Users/name/Library/Frameworks`.
 
+If you want sound support, you will need an additional SDL framework:
+
+* [**SDL2_mixer**](https://www.libsdl.org/projects/SDL_mixer/)
+
+Copy `SDL2_mixer.framework` to `/Library/Frameworks` or `/Users/name/Library/Frameworks`.
+
 Alternatively, SDL shared libraries can be installed using a package manager:
 
 For Homebrew:
 
     brew install sdl2 sdl2_image sdl2_ttf
 
+with sound:
+
+    brew install sdl2_mixer libvorbis libogg
+
 For MacPorts:
 
     sudo port install libsdl2 libsdl2_image libsdl2_ttf
+
+with sound:
+
+    sudo port install libsdl2_mixer libvorbis libogg
 
 ### ncurses and gettext
 
@@ -270,9 +286,10 @@ The Cataclysm source is compiled using `make`.
 * `NATIVE=osx` build for OS X. Required for all Mac builds.
 * `OSX_MIN=version` sets `-mmacosx-version-min=` (for OS X > 10.5 set it to 10.6 or higher); omit for 10.5.
 * `TILES=1` build the SDL version with graphical tiles (and graphical ASCII); omit to build with `ncurses`.
+* `SOUND=1` - if you want sound; this requires `TILES=1` and the additional dependencies mentioned above.
 * `FRAMEWORK=1` (tiles only) link to SDL libraries under the OS X Frameworks folders; omit to use SDL shared libraries from Homebrew or Macports.
 * `LOCALIZE=0` disable localization (to get around possible `gettext` errors if it is not setup correctly); omit to use `gettext`.
-* `LANGUAGES="<lang_id_1>[lang_id_2][...]"` compile localization files for specified languages. e.g. `LANGUAGES="zh_CN zh_TW"`
+* `LANGUAGES="<lang_id_1>[lang_id_2][...]"` compile localization files for specified languages. e.g. `LANGUAGES="zh_CN zh_TW"`. You can also use `LANGUAGES=all` to compile all localization files.
 * `RELEASE=1` build an optimized release version; omit for debug build.
 * `CLANG=1` build with [Clang](http://clang.llvm.org/), the compiler that's included with the latest Command Line Tools for Xcode; omit to build using gcc/g++.
 * `MACPORTS=1` build against dependencies installed via Macports, currently only `gettext` and `ncurses`.
@@ -294,7 +311,7 @@ Build a release SDL version using Clang, link to libraries in the OS X Framework
 
 Build a release curses version with gettext supplied by Macports:
 
-    make NATIVE=osx OSX_MIN=10.7 RELEASE=1 LOCALIZE=1 MACPORTS=1
+    make NATIVE=osx OSX_MIN=10.7 RELEASE=1 LOCALIZE=1 MACPORTS=1 CLANG=1
 
 ### Compiling localization files
 
@@ -316,6 +333,21 @@ For SDL:
 
 For `app` builds, launch Cataclysm.app from Finder.
 
+### dmg distribution
+
+You can build a nice dmg distribution file with the `dmgdist` target. You will need a tool called [dmgbuild](https://pypi.python.org/pypi/dmgbuild). To install this tool, you will need Python first. If you are on Mac OS X >= 10.8, Python 2.7 is pre-installed with the OS. If you are on an older version of OS X, you can download Python [on their official website](https://www.python.org/downloads/) or install it with homebrew `brew install python`. Once you have Python, you should be able to install `dmgbuild` by running:
+
+    # This install pip. It might not be required if it is already installed.
+    curl --silent --show-error --retry 5 https://bootstrap.pypa.io/get-pip.py | sudo python
+    # dmgbuild install
+    sudo pip install dmgbuild pyobjc-framework-Quartz
+
+Once `dmgbuild` is installed, you will be able to use the `dmgdist` target like this. The use of `USE_HOME_DIR=1` is important here because it will allow for an easy upgrade of the game while keeping the user config and his saves in his home directory.
+
+    make dmgdist NATIVE=osx OSX_MIN=10.7 RELEASE=1 TILES=1 FRAMEWORK=1 LOCALIZE=0 CLANG=1 USE_HOME_DIR=1
+
+You should see a `Cataclysm.dmg` file.
+
 ## Troubleshooting
 
 ### ISSUE: crash on startup due to libint.8.dylib aborting
@@ -334,6 +366,56 @@ Open Terminal's preferences, turn on "Use bright colors for bold text" in "Prefe
 
 
 # Windows
+
+## Visual Studio Guide
+
+Visual Studio 2015 is required to build Cataclysm. We created solution and project files in directory `msvc-full-features`. Because of the complexity and how troublesome defining every combination of build feature options are, in Visual Studio project we added all build features, including tiles, sound, localization and lua.
+
+### Dependencies
+
+#### SDL
+
+The following 4 libraries are required.
+
+[http://www.libsdl.org/release/SDL2-devel-2.0.4-VC.zip](http://www.libsdl.org/release/SDL2-devel-2.0.4-VC.zip)
+
+[http://www.libsdl.org/projects/SDL_ttf/release/SDL2_ttf-devel-2.0.14-VC.zip](http://www.libsdl.org/projects/SDL_ttf/release/SDL2_ttf-devel-2.0.14-VC.zip)
+
+[http://www.libsdl.org/projects/SDL_image/release/SDL2_image-devel-2.0.1-VC.zip](http://www.libsdl.org/projects/SDL_image/release/SDL2_image-devel-2.0.1-VC.zip)
+
+[http://www.libsdl.org/projects/SDL_mixer/release/SDL2_mixer-devel-2.0.1-VC.zip](http://www.libsdl.org/projects/SDL_mixer/release/SDL2_mixer-devel-2.0.1-VC.zip)
+
+#### libintl and libiconv
+
+There is a repo providing MSVC project files to build those two libraries. 
+
+[https://github.com/kahrl/gettext-msvc](https://github.com/kahrl/gettext-msvc)
+
+#### Lua
+
+Download and extract lua source code. The source of lua can be obtained from [https://www.lua.org/download.html](https://www.lua.org/download.html). Open a Visual Studio Command Prompt, switch to `src` directory in lua source code and excute the following commands:
+
+```
+cl /MD /O2 /c *.c
+del lua.obj luac.obj
+lib -out:Lua.lib *.obj
+```
+
+Then, we get the static library `Lua.lib`.
+
+### Building
+
+Building Cataclysm with Visual Studio is very simple. Just build it like a normal Visual C++ project. The process may takes a long period of time, so you'd better prepare a cup of coffee and some books in front of your computer :)
+
+If you need localization support, execute the bash script `lang/compile_mo.sh` inside Git Bash GUI just like on a UNIX-like system.
+
+### Debugging
+
+After building Cataclysm, you may discover that after pressing the debug button in Visual Studio, Cataclysm just exits after launch with return code 1. That is because of the wrong working directory. You need to configure the working directory to `$(ProjectDir)..`.
+
+### Make a distribution
+
+There is a batch script in `msvc-full-features` folder `distribute.bat`. It will create a sub folder `distribution` and copy all required files(eg. `data/`, `Cataclysm.exe` and dlls) into that folder. Then you can zip it and share the archive on the Internet.
 
 ## MinGW Guide
 To compile under windows MinGW you first need to download mingw. An automated GUI installer assistant called mingw-get-setup.exe will make everything a lot easier. I recommend installing it to `C:\MinGW`
@@ -442,6 +524,7 @@ update-core
 pacman -Su
 pacman -S mingw-w64-x86_64-gcc
 pacman -S mingw-w64-x86_64-SDL2 mingw-w64-x86_64-SDL2_image mingw-w64-x86_64-SDL2_mixer mingw-w64-x86_64-SDL2_ttf
+pacman -S mingw-w64-x86_64-ncurses
 pacman -S mingw-w64-x86_64-pkg-config mingw-w64-x86_64-libwebp
 pacman -S git make
 pacman -S mingw-w64-x86_64-lua
@@ -504,19 +587,23 @@ Note: or you can `setenv` the above (merging `OTHERS` into `CXXFLAGS`), but you 
 
 And then build with `gmake LOCALIZE=0 RELEASE=1`.
 
-### Building on OpenBSD/amd64 5.7 with GCC 4.9.2 from ports/packages
+### Building on OpenBSD/amd64 5.8 with GCC 4.9.2 from ports/packages
 
-First, install g++ and gmake from packages (g++ 4.8 or 4.9 should work; 4.9 has been tested):
+First, install g++, gmake, and libexecinfo from packages (g++ 4.8 or 4.9 should work; 4.9 has been tested):
 
-`pkg_add g++ gmake`
+`pkg_add g++ gmake libexecinfo`
 
 Then you should  be able to build with something like:
 
 `CXX=eg++ gmake`
 
-Only an ncurses build is possible, as SDL2 is currently broken on OpenBSD.
+Only an ncurses build is possible on 5.8-release, as SDL2 is broken. On recent -current or snapshots, however, you can install the SDL2 packages:
 
-Note that testing effort has been focused on -current, and these instructions applied to it at the time of writing and will probably be maintained for it in the future.
+`pkg_add sdl2 sdl2-image sdl2-mixer sdl2-ttf`
+
+and build with:
+
+`CXX=eg++ gmake TILES=1`
 
 ### Building on NetBSD/amd64 7.0RC1 with the system compiler
 

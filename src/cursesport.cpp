@@ -31,8 +31,11 @@
 
 WINDOW *mainwin;
 WINDOW *stdscr;
-pairs *colorpairs;   //storage for pair'ed colored, should be dynamic, meh
+std::array<pairs, 100> colorpairs;   //storage for pair'ed colored
 int echoOn;     //1 = getnstr shows input, 0 = doesn't show. needed for echo()-ncurses compatibility.
+
+// allow extra logic for framebuffer clears
+extern void handle_additional_window_clear( WINDOW* win );
 
 //***********************************
 //Pseudo-Curses Functions           *
@@ -265,10 +268,6 @@ int wrefresh(WINDOW *win)
 {
     if( win != nullptr && win->draw ) {
         curses_drawwindow(win);
-
-        #if defined(TILES)
-            try_sdl_update();
-        #endif
     }
     return 1;
 }
@@ -277,6 +276,16 @@ int wrefresh(WINDOW *win)
 int refresh(void)
 {
     return wrefresh(mainwin);
+}
+
+int wredrawln( WINDOW* /*win*/, int /*beg_line*/, int /*num_lines*/ ) {
+    /**
+     * This is a no-op for non-curses implementations. wincurse.cpp doesn't
+     * use windows console for rendering, and sdltiles.cpp doesn't either.
+     * If we had a console-based windows implementation, we'd need to do
+     * something here to force the line to redraw.
+     */
+    return OK;
 }
 
 int getch(void)
@@ -348,7 +357,7 @@ inline int fill(const char *&fmt, int &len, std::string &target)
     const char *tmpptr = fmt; // pointer for UTF8_getch, which increments it
     int tmplen = len;
     while( tmplen > 0 ) {
-        const unsigned ch = UTF8_getch(&tmpptr, &tmplen);
+        const uint32_t ch = UTF8_getch(&tmpptr, &tmplen);
         // UNKNOWN_UNICODE is most likely a (vertical/horizontal) line or similar
         const int cw = (ch == UNKNOWN_UNICODE) ? 1 : mk_wcwidth(ch);
         if( cw > 0 && dlen > 0 ) {
@@ -540,6 +549,8 @@ int werase(WINDOW *win)
     win->draw = true;
     wmove(win, 0, 0);
     //    wrefresh(win);
+    handle_additional_window_clear( win );
+
     return 1;
 }
 

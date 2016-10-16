@@ -8,12 +8,17 @@
 #include <memory>
 
 #include "game_constants.h"
+#include "cursesdef.h"
 #include "item.h"
 #include "lightmap.h"
 #include "item_stack.h"
 #include "active_item_cache.h"
 #include "int_id.h"
 #include "string_id.h"
+#include "rng.h"
+#include "enums.h"
+#include "pathfinding.h"
+#include "emit.h"
 
 //TODO: include comments about how these variables work. Where are they used. Are they constant etc.
 #define CAMPSIZE 1
@@ -35,14 +40,19 @@ class computer;
 struct itype;
 struct mapgendata;
 struct trap;
+struct oter_t;
+
 using trap_id = int_id<trap>;
-struct oter_id;
+using oter_id = int_id<oter_t>;
+
 struct regional_settings;
 struct mongroup;
 struct ter_t;
 using ter_id = int_id<ter_t>;
+using ter_str_id = string_id<ter_t>;
 struct furn_t;
 using furn_id = int_id<furn_t>;
+using furn_str_id = string_id<furn_t>;
 struct mtype;
 using mtype_id = string_id<mtype>;
 struct projectile;
@@ -72,6 +82,7 @@ class map;
 enum ter_bitflags : int;
 template<typename T>
 struct id_or_id;
+struct pathfinding_cache;
 
 class map_stack : public item_stack {
 private:
@@ -128,21 +139,13 @@ struct bash_params {
     bool bashed_solid; // Did we bash furniture, terrain or vehicle
 };
 
-enum visibility_type {
-  VIS_HIDDEN,
-  VIS_CLEAR,
-  VIS_LIT,
-  VIS_BOOMER,
-  VIS_DARK,
-  VIS_BOOMER_DARK
-};
-
 struct level_cache {
     level_cache(); // Zeroes all relevant values
     level_cache( const level_cache &other ) = default;
 
     bool transparency_cache_dirty;
     bool outside_cache_dirty;
+    bool floor_cache_dirty;
 
     float lm[MAPSIZE*SEEX][MAPSIZE*SEEY];
     float sm[MAPSIZE*SEEX][MAPSIZE*SEEY];
@@ -150,6 +153,7 @@ struct level_cache {
     // This is only valid for the duration of generate_lightmap
     float light_source_buffer[MAPSIZE*SEEX][MAPSIZE*SEEY];
     bool outside_cache[MAPSIZE*SEEX][MAPSIZE*SEEY];
+    bool floor_cache[MAPSIZE*SEEX][MAPSIZE*SEEY];
     float transparency_cache[MAPSIZE*SEEX][MAPSIZE*SEEY];
     float seen_cache[MAPSIZE*SEEX][MAPSIZE*SEEY];
     lit_level visibility_cache[MAPSIZE*SEEX][MAPSIZE*SEEY];
@@ -183,7 +187,9 @@ struct level_cache {
  */
 class map
 {
- friend class editmap;
+    friend class editmap;
+    friend class visitable<map_cursor>;
+
  public:
 // Constructors & Initialization
  map(int mapsize = MAPSIZE, bool zlev = false);
@@ -198,30 +204,34 @@ class map
 
 
     /**
-     * Sets a dirty flag on the transparency cache.
+     * Sets a dirty flag on the a given cache.
      *
      * If this isn't set, it's just assumed that
-     * the transparency cache hasn't changed and
+     * the cache hasn't changed and
      * doesn't need to be updated.
      */
+    /*@{*/
     void set_transparency_cache_dirty( const int zlev ) {
         if( inbounds_z( zlev ) ) {
             get_cache( zlev ).transparency_cache_dirty = true;
         }
     }
 
-    /**
-     * Sets a dirty flag on the outside cache.
-     *
-     * If this isn't set, it's just assumed that
-     * the outside cache hasn't changed and
-     * doesn't need to be updated.
-     */
     void set_outside_cache_dirty( const int zlev ) {
         if( inbounds_z( zlev ) ) {
             get_cache( zlev ).outside_cache_dirty = true;
         }
     }
+
+    void set_floor_cache_dirty( const int zlev ) {
+        if( inbounds_z( zlev ) ) {
+            get_cache( zlev ).floor_cache_dirty = true;
+        }
+    }
+
+    void set_pathfinding_cache_dirty( const int zlev );
+    /*@}*/
+
 
     /**
      * Callback invoked when a vehicle has moved.
@@ -321,6 +331,8 @@ public:
 
 // Move cost: 2D overloads
     int move_cost(const int x, const int y, const vehicle *ignored_vehicle = nullptr) const;
+    bool impassable(int x, int y) const;
+    bool passable(int x, int y) const;
     int move_cost_ter_furn(const int x, const int y) const;
 
 // Move cost: 3D
@@ -336,16 +348,19 @@ public:
     * @return The return value is interpreted as follows:
     * Move Cost | Meaning
     * --------- | -------
-    * 0         | Impassable
+    * 0         | Impassable. Use `passable`/`impassable` to check for this.
     * n > 0     | x*n turns to move past this
     */
     int move_cost( const tripoint &p, const vehicle *ignored_vehicle = nullptr ) const;
-
+    bool impassable( const tripoint &p ) const;
+    bool passable( const tripoint &p ) const;
 
     /**
     * Similar behavior to `move_cost()`, but ignores vehicles.
     */
     int move_cost_ter_furn( const tripoint &p ) const;
+    bool impassable_ter_furn( const tripoint &p ) const;
+    bool passable_ter_furn( const tripoint &p ) const;
 
     /**
     * Cost to move out of one tile and into the next.
@@ -422,16 +437,17 @@ public:
  std::vector<point> getDirCircle(const int Fx, const int Fy, const int Tx, const int Ty) const;
  std::vector<tripoint> get_dir_circle( const tripoint &f, const tripoint &t ) const;
 
- /**
-  * Calculate a best path using A*
-  *
-  * @param f The source location from which to path.
-  * @param t The destination to which to path.
-  * @param bash Bashing strength of pathing creature (0 means no bashing through terrain).
-  * @param maxdist Consider only paths up to this length (move cost multiplies "length" of a tile).
-  */
- std::vector<tripoint> route( const tripoint &f, const tripoint &t,
-                              const int bash, const int maxdist ) const;
+    /**
+     * Calculate the best path using A*
+     *
+     * @param f The source location from which to path.
+     * @param t The destination to which to path.
+     * @param settings Structure describing pathfinding parameters.
+     * @param pre_closed Never path through those points. They can still be the source or the destination.
+     */
+    std::vector<tripoint> route( const tripoint &f, const tripoint &t,
+                                 const pathfinding_settings &settings,
+                                 const std::set<tripoint> &pre_closed = {{ }} ) const;
 
  int coord_to_angle(const int x, const int y, const int tgtx, const int tgty) const;
 // Vehicles: Common to 2D and 3D
@@ -443,9 +459,15 @@ public:
     void clear_vehicle_list( int zlev );
     void update_vehicle_list( submap * const to, const int zlev );
 
-    void destroy_vehicle (vehicle *veh);
-    void vehmove();          // Vehicle movement
-    bool vehproceed(); // Returns true if a vehicle moved, false otherwise
+    // Removes vehicle from map and returns it in unique_ptr
+    std::unique_ptr<vehicle> detach_vehicle( vehicle *veh );
+    void destroy_vehicle( vehicle *veh );
+    // Vehicle movement
+    void vehmove();
+    // Selects a vehicle to move, returns false if no moving vehicles
+    bool vehproceed();
+    // Actually moves a vehicle
+    bool vehact( vehicle &veh );
 
 // 3D vehicles
     VehicleList get_vehicles( const tripoint &start, const tripoint &end );
@@ -475,21 +497,18 @@ public:
     void unboard_vehicle( const tripoint &p );//remove player from vehicle at p
     // Change vehicle coords and move vehicle's driver along.
     // WARNING: not checking collisions!
-    void displace_vehicle( tripoint &p, const tripoint &dp );
+    vehicle *displace_vehicle( tripoint &p, const tripoint &dp );
     // move water under wheels. true if moved
     bool displace_water( const tripoint &dp );
 
-    // Returns the modifier on wheel area due to bad surface
-    // 1.0 on road, 0.0 in air
-    // <0.0 when the vehicle should be destroyed (sunk in water)
-    // TODO: Add the values between 0.0 and 1.0 for offroading
+    // Returns the wheel area of the vehicle multipled by traction of the surface
     // TODO: Remove the ugly sinking vehicle hack
-    float vehicle_traction( vehicle &veh ) const;
+    float vehicle_wheel_traction( const vehicle &veh ) const;
 
     // Like traction, except for water
     // TODO: Actually implement (this is a stub)
     // TODO: Test for it when the vehicle sinks rather than when it has VP_FLOATS
-    float vehicle_buoyancy( vehicle &veh ) const;
+    float vehicle_buoyancy( const vehicle &veh ) const;
 
     // Returns if the vehicle should fall down a z-level
     bool vehicle_falling( vehicle &veh );
@@ -509,58 +528,49 @@ public:
 
 // Furniture: 2D overloads
     void set(const int x, const int y, const ter_id new_terrain, const furn_id new_furniture);
-    void set(const int x, const int y, const std::string new_terrain, const std::string new_furniture);
 
     std::string name(const int x, const int y);
     bool has_furn(const int x, const int y) const;
 
     furn_id furn(const int x, const int y) const; // Furniture at coord (x, y); {x|y}=(0, SEE{X|Y}*3]
-    std::string get_furn(const int x, const int y) const;
-    const furn_t & furn_at(const int x, const int y) const;
 
     void furn_set(const int x, const int y, const furn_id new_furniture);
-    void furn_set(const int x, const int y, const std::string new_furniture);
 
     std::string furnname(const int x, const int y);
 // Furniture: 3D
     void set( const tripoint &p, const ter_id new_terrain, const furn_id new_furniture );
-    void set( const tripoint &p, const std::string new_terrain, const std::string new_furniture );
 
     std::string name( const tripoint &p );
     std::string disp_name( const tripoint &p );
+    /**
+    * Returns the name of the obstacle at p that might be blocking movement/projectiles/etc.
+    * Note that this only accounts for vehicles, terrain, and furniture.
+    */
+    std::string obstacle_name( const tripoint &p );
     bool has_furn( const tripoint &p ) const;
 
     furn_id furn( const tripoint &p ) const;
-    std::string get_furn( const tripoint &p ) const;
-    const furn_t & furn_at( const tripoint &p ) const;
 
     void furn_set( const tripoint &p, const furn_id new_furniture );
-    void furn_set( const tripoint &p, const std::string new_furniture );
 
     std::string furnname( const tripoint &p);
     bool can_move_furniture( const tripoint &pos, player * p = nullptr );
 // Terrain: 2D overloads
     ter_id ter(const int x, const int y) const; // Terrain integer id at coord (x, y); {x|y}=(0, SEE{X|Y}*3]
-    std::string get_ter(const int x, const int y) const; // Terrain string id at coord (x, y); {x|y}=(0, SEE{X|Y}*3]
     std::string get_ter_harvestable(const int x, const int y) const; // harvestable of the terrain
     ter_id get_ter_transforms_into(const int x, const int y) const; // get the terrain id to transform to
     int get_ter_harvest_season(const int x, const int y) const; // get season to harvest the terrain
-    const ter_t & ter_at(const int x, const int y) const; // Terrain at coord (x, y); {x|y}=(0, SEE{X|Y}*3]
 
     void ter_set(const int x, const int y, const ter_id new_terrain);
-    void ter_set(const int x, const int y, const std::string new_terrain);
 
     std::string tername(const int x, const int y) const; // Name of terrain at (x, y)
 // Terrain: 3D
     ter_id ter( const tripoint &p ) const;
-    std::string get_ter( const tripoint &p ) const;
     std::string get_ter_harvestable( const tripoint &p ) const;
     ter_id get_ter_transforms_into( const tripoint &p ) const;
     int get_ter_harvest_season( const tripoint &p ) const;
-    const ter_t & ter_at( const tripoint &p ) const;
 
     void ter_set( const tripoint &p, const ter_id new_terrain);
-    void ter_set( const tripoint &p, const std::string new_terrain);
 
     std::string tername( const tripoint &p ) const;
 
@@ -591,31 +601,28 @@ public:
 // Flags: 2D overloads
     std::string features(const int x, const int y); // Words relevant to terrain (sharp, etc)
     bool has_flag(const std::string & flag, const int x, const int y) const;  // checks terrain, furniture and vehicles
-    bool can_put_items(const int x, const int y); // True if items can be placed in this tile
+    bool can_put_items_ter_furn(const int x, const int y) const; // True if items can be placed in this tile
     bool has_flag_ter(const std::string & flag, const int x, const int y) const;  // checks terrain
     bool has_flag_furn(const std::string & flag, const int x, const int y) const;  // checks furniture
     bool has_flag_ter_or_furn(const std::string & flag, const int x, const int y) const; // checks terrain or furniture
-    bool has_flag_ter_and_furn(const std::string & flag, const int x, const int y) const; // checks terrain and furniture
     // fast "oh hai it's update_scent/lightmap/draw/monmove/self/etc again, what about this one" flag checking
     bool has_flag(const ter_bitflags flag, const int x, const int y) const;  // checks terrain, furniture and vehicles
     bool has_flag_ter(const ter_bitflags flag, const int x, const int y) const;  // checks terrain
     bool has_flag_furn(const ter_bitflags flag, const int x, const int y) const;  // checks furniture
     bool has_flag_ter_or_furn(const ter_bitflags flag, const int x, const int y) const; // checks terrain or furniture
-    bool has_flag_ter_and_furn(const ter_bitflags flag, const int x, const int y) const; // checks terrain and furniture
 // Flags: 3D
     std::string features( const tripoint &p ); // Words relevant to terrain (sharp, etc)
     bool has_flag( const std::string &flag, const tripoint &p ) const;  // checks terrain, furniture and vehicles
-    bool can_put_items( const tripoint &p ); // True if items can be placed in this tile
+    bool can_put_items( const tripoint &p ) const; // True if items can be dropped in this tile
+    bool can_put_items_ter_furn( const tripoint &p ) const; // True if items can be placed in this tile
     bool has_flag_ter( const std::string &flag, const tripoint &p ) const;  // checks terrain
     bool has_flag_furn( const std::string &flag, const tripoint &p ) const;  // checks furniture
     bool has_flag_ter_or_furn( const std::string &flag, const tripoint &p ) const; // checks terrain or furniture
-    bool has_flag_ter_and_furn( const std::string &flag, const tripoint &p ) const; // checks terrain and furniture
     // fast "oh hai it's update_scent/lightmap/draw/monmove/self/etc again, what about this one" flag checking
     bool has_flag( const ter_bitflags flag, const tripoint &p ) const;  // checks terrain, furniture and vehicles
     bool has_flag_ter( const ter_bitflags flag, const tripoint &p ) const;  // checks terrain
     bool has_flag_furn( const ter_bitflags flag, const tripoint &p ) const;  // checks furniture
     bool has_flag_ter_or_furn( const ter_bitflags flag, const tripoint &p ) const; // checks terrain or furniture
-    bool has_flag_ter_and_furn( const ter_bitflags flag, const tripoint &p ) const; // checks terrain and furniture
 
 // Bashable: 2D
     bool is_bashable(const int x, const int y) const;
@@ -662,30 +669,29 @@ public:
   *  all terrain is floor and the last terrain is a wall */
  bool is_last_ter_wall(const bool no_furn, const int x, const int y,
                        const int xmax, const int ymax, const direction dir) const;
-    bool flammable_items_at( const tripoint &p );
-    bool moppable_items_at( const tripoint &p );
+    /**
+     * Checks if there are any flammable items on the tile.
+     * @param threshold Fuel threshold (lower means worse fuels are accepted).
+     */
+    bool flammable_items_at( const tripoint &p, int threshold = 0 );
  point random_outdoor_tile();
 // mapgen
 
 void draw_line_ter(const ter_id type, int x1, int y1, int x2, int y2);
-void draw_line_ter(const std::string type, int x1, int y1, int x2, int y2);
 void draw_line_furn(furn_id type, int x1, int y1, int x2, int y2);
-void draw_line_furn(const std::string type, int x1, int y1, int x2, int y2);
 void draw_fill_background(ter_id type);
-void draw_fill_background(std::string type);
 void draw_fill_background(ter_id (*f)());
 void draw_fill_background(const id_or_id<ter_t> & f);
 
 void draw_square_ter(ter_id type, int x1, int y1, int x2, int y2);
-void draw_square_ter(std::string type, int x1, int y1, int x2, int y2);
 void draw_square_furn(furn_id type, int x1, int y1, int x2, int y2);
-void draw_square_furn(std::string type, int x1, int y1, int x2, int y2);
 void draw_square_ter(ter_id (*f)(), int x1, int y1, int x2, int y2);
 void draw_square_ter(const id_or_id<ter_t> & f, int x1, int y1, int x2, int y2);
-void draw_rough_circle(ter_id type, int x, int y, int rad);
-void draw_rough_circle(std::string type, int x, int y, int rad);
+void draw_rough_circle_ter(ter_id type, int x, int y, int rad);
 void draw_rough_circle_furn(furn_id type, int x, int y, int rad);
-void draw_rough_circle_furn(std::string type, int x, int y, int rad);
+void draw_circle_ter(ter_id type, double x, double y, double rad);
+void draw_circle_ter(ter_id type, int x, int y, int rad);
+void draw_circle_furn(furn_id type, int x, int y, int rad);
 
 void add_corpse( const tripoint &p );
 
@@ -729,7 +735,11 @@ void add_corpse( const tripoint &p );
     void fungalize( const tripoint &p, Creature *source = nullptr, double spore_chance = 0.0 );
 
     bool has_adjacent_furniture( const tripoint &p );
-    void mop_spills( const tripoint &p );
+     /** Remove moppable fields/items at this location
+     *  @param p the location
+     *  @return true if anything moppable was there, false otherwise.
+     */
+    bool mop_spills( const tripoint &p );
     /**
     * Moved here from weather.cpp for speed. Decays fire, washable fields and scent.
     * Washable fields are decayed only by 1/3 of the amount fire is.
@@ -772,25 +782,25 @@ void add_corpse( const tripoint &p );
     void i_rem(const int x, const int y, item* it);
     void spawn_item(const int x, const int y, const std::string &itype_id,
                     const unsigned quantity=1, const long charges=0,
-                    const unsigned birthday=0, const int damlevel=0, const bool rand = true);
-    int max_volume(const int x, const int y);
-    int free_volume(const int x, const int y);
-    int stored_volume(const int x, const int y);
+                    const unsigned birthday=0, const int damlevel=0);
+    units::volume max_volume(const int x, const int y);
+    units::volume free_volume(const int x, const int y);
+    units::volume stored_volume(const int x, const int y);
     bool add_item_or_charges(const int x, const int y, item new_item, int overflow_radius = 2);
     void add_item(const int x, const int y, item new_item);
     void spawn_an_item( const int x, const int y, item new_item,
                         const long charges, const int damlevel );
-    int place_items(items_location loc, const int chance, const int x1, const int y1,
-                  const int x2, const int y2, bool ongrass, const int turn, bool rand = true);
+    std::vector<item *> place_items( items_location loc, const int chance, const int x1, const int y1,
+                                     const int x2, const int y2, bool ongrass, const int turn,
+                                     int magazine = 0, int ammo = 0 );
     void spawn_items(const int x, const int y, const std::vector<item> &new_items);
     void create_anomaly(const int cx, const int cy, artifact_natural_property prop);
 // Items: 3D
     // Accessor that returns a wrapped reference to an item stack for safe modification.
     map_stack i_at( const tripoint &p );
     item water_from( const tripoint &p );
-    item swater_from( const tripoint &p );
     void i_clear( const tripoint &p );
-    // i_rem() methods that return values act like conatiner::erase(),
+    // i_rem() methods that return values act like container::erase(),
     // returning an iterator to the next item after removal.
     std::list<item>::iterator i_rem( const tripoint &p, std::list<item>::iterator it );
     int i_rem( const tripoint &p, const int index );
@@ -799,11 +809,10 @@ void add_corpse( const tripoint &p );
     void spawn_natural_artifact( const tripoint &p, const artifact_natural_property prop );
     void spawn_item( const tripoint &p, const std::string &itype_id,
                      const unsigned quantity=1, const long charges=0,
-                     const unsigned birthday=0, const int damlevel=0, const bool rand = true);
-    int max_volume( const tripoint &p );
-    int free_volume( const tripoint &p );
-    int stored_volume( const tripoint &p );
-    bool is_full( const tripoint &p, const int addvolume = -1, const int addnumber = -1 );
+                     const unsigned birthday=0, const int damlevel=0);
+    units::volume max_volume( const tripoint &p );
+    units::volume free_volume( const tripoint &p );
+    units::volume stored_volume( const tripoint &p );
     item &add_item_or_charges( const tripoint &p, item new_item, int overflow_radius = 2 );
     item &add_item_at( const tripoint &p, std::list<item>::iterator index, item new_item );
     item &add_item( const tripoint &p, item new_item );
@@ -824,9 +833,9 @@ void add_corpse( const tripoint &p );
      */
     /*@{*/
     std::list<item> use_amount_square( const tripoint &p, const itype_id type,
-                                       long &quantity, const bool use_container );
+                                       long &quantity );
     std::list<item> use_amount( const tripoint &origin, const int range, const itype_id type,
-                                long &amount, const bool use_container = false );
+                                long &amount );
     std::list<item> use_charges( const tripoint &origin, const int range, const itype_id type,
                                  long &amount );
     /*@}*/
@@ -842,10 +851,13 @@ void add_corpse( const tripoint &p );
     * all. Values <= 0 or > 100 are invalid.
     * @param ongrass If false the items won't spawn on flat terrain (grass, floor, ...).
     * @param turn The birthday that the created items shall have.
-    * @return The number of placed items.
+    * @param magazine percentage chance item will contain the default magazine
+    * @param ammo percentage chance item will be filled with default ammo
+    * @return vector containing all placed items
     */
-    int place_items( items_location loc, const int chance, const tripoint &f,
-                     const tripoint &t, bool ongrass, const int turn, bool rand = true );
+    std::vector<item *> place_items( items_location loc, const int chance, const tripoint &f,
+                                     const tripoint &t, bool ongrass, const int turn,
+                                     int magazine = 0, int ammo = 0 );
     /**
     * Place items from an item group at p. Places as much items as the item group says.
     * (Most item groups are distributions and will only create one item.)
@@ -949,11 +961,23 @@ void add_corpse( const tripoint &p );
          * Add field entry at point, or set density if present
          * @return false if the field could not be created (out of bounds), otherwise true.
          */
-        bool add_field( const tripoint &p, const field_id t, const int density, const int age);
+        bool add_field( const tripoint &p, const field_id t, const int density, const int age = 0 );
         /**
          * Remove field entry at xy, ignored if the field entry is not present.
          */
         void remove_field( const tripoint &p, const field_id field_to_remove );
+
+        // Splatters of various kind
+        void add_splatter( const field_id type, const tripoint &where, int density = 1 );
+        void add_splatter_trail( const field_id type, const tripoint &from, const tripoint &to );
+        void add_splash( const field_id type, const tripoint &center, int radius, int density );
+
+        void propagate_field( const tripoint &center, field_id fid,
+                              int amount, int max_density = MAX_FIELD_DENSITY );
+
+        /** Runs one cycle of emission @ref src which **may** result in propagation of fields */
+        void emit_field( const tripoint &pos, const emit_id &src );
+
 // End of 3D field function block
 
 // Scent propagation helpers
@@ -961,8 +985,8 @@ void add_corpse( const tripoint &p );
      * Build the map of scent-resistant tiles.
      * Should be way faster than if done in `game.cpp` using public map functions.
      */
-    void scent_blockers( bool (&blocks_scent)[SEEX * MAPSIZE][SEEY * MAPSIZE],
-                         bool (&reduces_scent)[SEEX * MAPSIZE][SEEY * MAPSIZE],
+    void scent_blockers( std::array<std::array<bool, SEEX * MAPSIZE>, SEEY * MAPSIZE> &blocks_scent,
+                         std::array<std::array<bool, SEEX * MAPSIZE>, SEEY * MAPSIZE> &reduces_scent,
                          int minx, int miny, int maxx, int maxy );
 
 // Computers
@@ -1038,6 +1062,8 @@ public:
  vehicle *add_vehicle(const vproto_id &type, const int x, const int y, const int dir,
                       const int init_veh_fuel = -1, const int init_veh_status = -1,
                       const bool merge_wrecks = true);
+
+    // Note: in 3D mode, will actually build caches on ALL zlevels
     void build_map_cache( int zlev, bool skip_lightmap = false );
 
     vehicle *add_vehicle( const vgroup_id &type, const tripoint &p, const int dir,
@@ -1064,6 +1090,12 @@ public:
          * Ignored if smaller than 0.
          */
         bool pl_sees( const tripoint &t, int max_range ) const;
+        /**
+         * Uses the map cache to tell if the player could see the given square.
+         * pl_sees implies pl_line_of_sight
+         * Used for infrared.
+         */
+        bool pl_line_of_sight( const tripoint &t, int max_range ) const;
     std::set<vehicle*> dirty_vehicle_list;
 
     /** return @ref abs_sub */
@@ -1071,7 +1103,7 @@ public:
     /**
      * Translates local (to this map) coordinates of a square to
      * global absolute coordinates. (x,y) is in the system that
-     * is used by the ter_at/furn_at/i_at functions.
+     * is used by the ter/furn/i_at functions.
      * Output is in the same scale, but in global system.
      */
     point getabs(const int x, const int y) const;
@@ -1132,7 +1164,11 @@ protected:
          * Fast forward a submap that has just been loading into this map.
          * This is used to rot and remove rotten items, grow plants, fill funnels etc.
          */
-        void actualize( const int gridx, const int gridy, const int gridz );
+        void actualize( int gridx, int gridy, int gridz );
+        /**
+         * Hacks in missing roofs. Should be removed when 3D mapgen is done.
+         */
+        void add_roofs( int gridx, int gridy, int gridz );
         /**
          * Whether the item has to be removed as it has rotten away completely.
          * @param pnt The *absolute* position of the item in the world (not just on this map!),
@@ -1148,10 +1184,11 @@ protected:
         template <typename Container>
         void remove_rotten_items( Container &items, const tripoint &p );
         /**
-         * Try to fill funnel based items here.
-         * @param pnt The location in this map where to fill funnels.
+         * Try to fill funnel based items here. Simulates rain from `since_turn` till now.
+         * @param p The location in this map where to fill funnels.
+         * @param since_turn First turn of simulated filling.
          */
-        void fill_funnels( const tripoint &p );
+        void fill_funnels( const tripoint &p, int since_turn );
         /**
          * Try to grow a harvestable plant to the next stage(s).
          */
@@ -1162,6 +1199,18 @@ protected:
          * called the last time.
          */
         void restock_fruits( const tripoint &p, int time_since_last_actualize );
+        /**
+         * Produce sap on tapped maple trees
+         * @param time_since_last_actualize Time (in turns) since this function has been
+         * called the last time.
+         */
+        void produce_sap( const tripoint &p, int time_since_last_actualize );
+        /**
+         * Radiation-related plant (and fungus?) death.
+         */
+        void rad_scorch( const tripoint &p, int time_since_last_actualize );
+        void decay_cosmetic_fields( const tripoint &p, int time_since_last_actualize );
+
         void player_in_field( player &u );
         void monster_in_field( monster &z );
         /**
@@ -1173,13 +1222,25 @@ protected:
         void copy_grid( const tripoint &to, const tripoint &from );
  void draw_map(const oter_id terrain_type, const oter_id t_north, const oter_id t_east,
                 const oter_id t_south, const oter_id t_west, const oter_id t_neast,
-                const oter_id t_seast, const oter_id t_nwest, const oter_id t_swest,
+                const oter_id t_seast, const oter_id t_swest, const oter_id t_nwest,
                 const oter_id t_above, const int turn, const float density,
                 const int zlevel, const regional_settings * rsettings);
 
  void build_transparency_cache( int zlev );
 public:
  void build_outside_cache( int zlev );
+    void build_floor_cache( int zlev );
+    // We want this visible in `game`, because we want it built earlier in the turn than the rest
+    void build_floor_caches();
+
+    /** Get random tile on circumference of a circle */
+    tripoint random_perimeter( const tripoint& src, int radius ) const
+    {
+        tripoint dst;
+        calc_ray_end( rng( 1, 360 ), radius, src, dst );
+        return dst;
+    }
+
 protected:
  void generate_lightmap( int zlev );
  void build_seen_cache( const tripoint &origin, int target_z );
@@ -1291,7 +1352,7 @@ private:
  void add_light_from_items( const tripoint &p, std::list<item>::iterator begin,
                             std::list<item>::iterator end );
  void calc_ray_end(int angle, int range, const tripoint &p, tripoint &out ) const;
- vehicle *add_vehicle_to_map(vehicle *veh, bool merge_wrecks);
+ vehicle *add_vehicle_to_map( std::unique_ptr<vehicle> veh, bool merge_wrecks);
 
     // Internal methods used to bash just the selected features
     // Information on what to bash/what was bashed is read from/written to the bash_params struct
@@ -1356,23 +1417,35 @@ private:
      */
     std::array< std::unique_ptr<level_cache>, OVERMAP_LAYERS > caches;
 
+    mutable std::array< std::unique_ptr<pathfinding_cache>, OVERMAP_LAYERS > pathfinding_caches;
+
     // Note: no bounds check
-    level_cache &get_cache( const int zlev ) {
+    level_cache &get_cache( int zlev ) {
         return *caches[zlev + OVERMAP_DEPTH];
     }
+
+    pathfinding_cache &get_pathfinding_cache( int zlev ) const;
+
+    visibility_variables visibility_variables_cache;
 
   public:
-    const level_cache &get_cache_ref( const int zlev ) const {
+    const level_cache &get_cache_ref( int zlev ) const {
         return *caches[zlev + OVERMAP_DEPTH];
     }
 
-    void update_visibility_cache( visibility_variables &cache, int zlev );
+    const pathfinding_cache &get_pathfinding_cache_ref( int zlev ) const;
+
+    void update_pathfinding_cache( int zlev ) const;
+
+    void update_visibility_cache( int zlev );
+    const visibility_variables &get_visibility_variables_cache() const;
 
     // Clips the area to map bounds
     tripoint_range points_in_rectangle( const tripoint &from, const tripoint &to ) const;
     tripoint_range points_in_radius( const tripoint &center, size_t radius, size_t radiusz = 0 ) const;
     level_cache &access_cache( int zlev );
     const level_cache &access_cache( int zlev ) const;
+    bool need_draw_lower_floor(const tripoint &p);
 };
 
 std::vector<point> closest_points_first(int radius, point p);
@@ -1386,27 +1459,6 @@ friend class editmap;
 public:
  tinymap(int mapsize = 2, bool zlevels = false);
 };
-
-// Hoisted to header and inlined so the test in tests/shadowcasting_test.cpp can use it.
-// Beer–Lambert law says attenuation is going to be equal to
-// 1 / (e^al) where a = coefficient of absorption and l = length.
-// Factoring out length, we get 1 / (e^((a1*a2*a3*...*an)*l))
-// We merge all of the absorption values by taking their cumulative average.
-inline float sight_calc( const float &numerator, const float &transparency, const int &distance ) {
-    return numerator / (float)exp( transparency * distance );
-}
-inline bool sight_check( const float &transparency, const float &/*intensity*/ ) {
-    return transparency > LIGHT_TRANSPARENCY_SOLID;
-}
-
-template<int xx, int xy, int yx, int yy, float(*calc)(const float &, const float &, const int &),
-    bool(*check)(const float &, const float &)>
-    void castLight( float (&output_cache)[MAPSIZE*SEEX][MAPSIZE*SEEY],
-                    const float (&input_array)[MAPSIZE*SEEX][MAPSIZE*SEEY],
-                    const int offsetX, const int offsetY, const int offsetDistance,
-                    const float numerator = 1.0, const int row = 1,
-                    float start = 1.0f, const float end = 0.0f,
-                    double cumulative_transparency = LIGHT_TRANSPARENCY_OPEN_AIR );
 
 #endif
 

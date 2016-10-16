@@ -252,6 +252,7 @@ class JsonIn
         bool read(bool &b);
         bool read(char &c);
         bool read(signed char &c);
+        bool read( unsigned char &c );
         bool read(short unsigned int &s);
         bool read(short int &s);
         bool read(int &i);
@@ -664,8 +665,11 @@ class JsonObject
         std::vector<std::string> get_string_array(const std::string &name);
         // get_object returns empty object if not found
         JsonObject get_object(const std::string &name);
+
         // get_tags returns empty set if none found
-        std::set<std::string> get_tags(const std::string &name);
+        template <typename T = std::string>
+        std::set<T> get_tags( const std::string &name );
+
         // TODO: some sort of get_map(), maybe
 
         // type checking
@@ -820,6 +824,10 @@ class JsonArray
         JsonArray get_array(int index);
         JsonObject get_object(int index);
 
+        // get_tags returns empty set if none found
+        template <typename T = std::string>
+        std::set<T> get_tags( int index );
+
         // iterative type checking
         bool test_null();
         bool test_bool();
@@ -868,6 +876,53 @@ class JsonArray
             return jsin->read(t);
         }
 };
+
+template <typename T>
+std::set<T> JsonArray::get_tags( int index )
+{
+    std::set<T> res;
+
+    verify_index( index );
+    jsin->seek(positions[ index ]);
+
+    // allow single string as tag
+    if( jsin->test_string() ) {
+        res.insert( T( jsin->get_string() ) );
+        return res;
+    }
+
+    JsonArray jsarr = jsin->get_array();
+    while( jsarr.has_more() ) {
+        res.insert( T( jsarr.next_string() ) );
+    }
+
+    return res;
+}
+
+template <typename T>
+std::set<T> JsonObject::get_tags( const std::string &name )
+{
+    std::set<T> res;
+    int pos = positions[ name ];
+    if ( pos <= start ) {
+        return res;
+    }
+    jsin->seek( pos );
+
+    // allow single string as tag
+    if( jsin->test_string() ) {
+        res.insert( T( jsin->get_string() ) );
+        return res;
+    }
+
+    // otherwise assume it's an array and error if it isn't.
+    JsonArray jsarr = jsin->get_array();
+    while( jsarr.has_more() ) {
+        res.insert( T( jsarr.next_string() ) );
+    }
+
+    return res;
+}
 
 
 /* JsonSerializer

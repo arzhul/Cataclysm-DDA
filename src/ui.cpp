@@ -12,6 +12,7 @@
 #include "options.h"
 #include "game.h"
 #include "player.h"
+#include "cata_utility.h"
 
 #ifdef debuguimenu
 #define dprint(a,...)      mvprintw(a,0,__VA_ARGS__)
@@ -35,9 +36,12 @@ int getfoldedwidth (std::vector<std::string> foldedstring)
 }
 
 ////////////////////////////////////
-uimenu::uimenu()
+uimenu::uimenu( const std::string &hotkeys_override )
 {
     init();
+    if( !hotkeys_override.empty() ) {
+        hotkeys = hotkeys_override;
+    }
 }
 
 // here we emulate the old int ret=menu(bool, "header", "option1", "option2", ...);
@@ -192,17 +196,6 @@ void uimenu::init()
     last_fsize = -1;
     last_vshift = -1;
     hotkeys = DEFAULT_HOTKEYS;
-}
-
-/*
- * case insensitive string::find( string::findstr ). findstr must be lowercased
- */
-bool lcmatch(const std::string &str, const std::string &findstr)
-{
-    std::string ret = "";
-    ret.reserve( str.size() );
-    transform( str.begin(), str.end(), std::back_inserter(ret), tolower );
-    return ( (int)ret.find( findstr ) != -1 );
 }
 
 /*
@@ -508,6 +501,7 @@ void uimenu::setup()
     started = true;
 }
 
+// @todo replace content of this function by draw_scrollbar() from output.(h|cpp)
 void uimenu::apply_scrollbar()
 {
     if ( ! scrollbar_auto ) {
@@ -518,7 +512,7 @@ void uimenu::apply_scrollbar()
         last_fsize = fentries.size();
 
         int sbside = ( scrollbar_side == 0 ? 0 : w_width );
-        int estart = textformatted.size() + 1;
+        int estart = textformatted.size() + 2;
 
         if ( !fentries.empty() && vmax < (int)fentries.size() ) {
             wattron(window, border_color);
@@ -593,7 +587,7 @@ void uimenu::show()
             int ei = fentries [ fei ];
             nc_color co = ( ei == selected ?
                             hilight_color :
-                            ( entries[ ei ].enabled ?
+                            ( entries[ ei ].enabled || entries[ei].force_color ?
                               entries[ ei ].text_color :
                               disabled_color )
                           );
@@ -611,7 +605,8 @@ void uimenu::show()
                 // cases printeing starts at pad_left+1, here it starts at pad_left+4, so 3 cells less
                 // to be used.
                 const auto entry = utf8_wrapper( entries[ ei ].txt );
-                trim_and_print( window, estart + si, pad_left + 4, w_width - 2 - pad_left - pad_right, co, "%s", entry.c_str() );
+                trim_and_print( window, estart + si, pad_left + 4,
+                                w_width - 5 - pad_left - pad_right, co, "%s", entry.c_str() );
             }
             if ( !entries[ei].extratxt.txt.empty() ) {
                 mvwprintz( window, estart + si, pad_left + 1 + entries[ ei ].extratxt.left,

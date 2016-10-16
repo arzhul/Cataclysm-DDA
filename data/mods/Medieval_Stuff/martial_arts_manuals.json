@@ -12,9 +12,8 @@
         "material": "paper",
         "weight": 150,
         "volume": 1,
-        "bashing": 0,
-        "cutting": 0,
         "to_hit": -1,
+        "use_action": "MA_MANUAL",
         "book_data": {
             "max_level" : 0,
             "intelligence" : 0,
@@ -22,8 +21,7 @@
             "fun" : 0,
             "skill" : "none",
             "required_level" : 0,
-            "chapters": 0,
-            "use_action": "MA_MANUAL"
+            "chapters": 0
         }
     },
     {
@@ -39,9 +37,8 @@
         "material": "paper",
         "weight": 150,
         "volume": 1,
-        "bashing": 0,
-        "cutting": 0,
         "to_hit": -1,
+        "use_action": "MA_MANUAL",
         "book_data": {
             "max_level" : 0,
             "intelligence" : 0,
@@ -49,13 +46,12 @@
             "fun" : 0,
             "skill" : "none",
             "required_level" : 0,
-            "chapters": 0,
-            "use_action": "MA_MANUAL"
+            "chapters": 0
         }
     },
     {
         "type" : "item_group",
-        "id"   : "ma_manuals",
+        "id"   : "book_martial",
         "items":[
             ["manual_swordsmanship", 5],
             ["manual_pankration", 5]

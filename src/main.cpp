@@ -23,13 +23,10 @@
 #include <libintl.h>
 #endif
 #include "translations.h"
-#if (defined OSX_SDL_FW)
-#include "SDL.h"
-#elif (defined OSX_SDL_LIBS)
-#include "SDL/SDL.h"
-#endif
 
 void exit_handler(int s);
+
+extern bool test_dirty;
 
 namespace {
 
@@ -62,7 +59,10 @@ int main(int argc, char *argv[])
 #endif
     int seed = time(NULL);
     bool verifyexit = false;
-    bool check_all_mods = false;
+    bool check_mods = false;
+    std::string dump;
+    dump_mode dmode = dump_mode::TSV;
+    std::vector<std::string> opts;
 
     // Set default file paths
 #ifdef PREFIX
@@ -107,11 +107,42 @@ int main(int argc, char *argv[])
                 }
             },
             {
-                "--check-mods", nullptr,
+                "--check-mods", "[mods...]",
                 "Checks the json files belonging to cdda mods",
                 section_default,
-                [&check_all_mods](int, const char **) -> int {
-                    check_all_mods = true;
+                [&check_mods,&opts]( int n, const char *params[] ) -> int {
+                    check_mods = true;
+                    test_mode = true;
+                    for( int i = 0; i < n; ++i ) {
+                        opts.emplace_back( params[ i ] );
+                    }
+                    return 0;
+                }
+            },
+            {
+                "--dump-stats", "<what> [mode = TSV] [opts...]",
+                "Dumps item stats",
+                section_default,
+                [&dump,&dmode,&opts](int n, const char *params[]) -> int {
+                    if( n < 1 ) {
+                        return -1;
+                    }
+                    test_mode = true;
+                    dump = params[ 0 ];
+                    for( int i = 2; i < n; ++i ) {
+                        opts.emplace_back( params[ i ] );
+                    }
+                    if( n >= 2 ) {
+                        if( !strcmp( params[ 1 ], "TSV" ) ) {
+                            dmode = dump_mode::TSV;
+                            return 0;
+                        } else if( !strcmp( params[ 1 ], "HTML" ) ) {
+                            dmode = dump_mode::HTML;
+                            return 0;
+                        } else {
+                            return -1;
+                        }
+                    }
                     return 0;
                 }
             },
@@ -367,14 +398,18 @@ int main(int argc, char *argv[])
 
     set_language(true);
 
-    if (initscr() == NULL) { // Initialize ncurses
-        DebugLog( D_ERROR, DC_ALL ) << "initscr failed!";
-        return 1;
+    // in test mode don't initialize curses to avoid escape sequences being inserted into output stream
+    if( !test_mode ) {
+         if( initscr() == nullptr ) { // Initialize ncurses
+            DebugLog( D_ERROR, DC_ALL ) << "initscr failed!";
+            return 1;
+        }
+        init_interface();
+        noecho();  // Don't echo keypresses
+        cbreak();  // C-style breaks (e.g. ^C to SIGINT)
+        keypad(stdscr, true); // Numpad is numbers
     }
-    init_interface();
-    noecho();  // Don't echo keypresses
-    cbreak();  // C-style breaks (e.g. ^C to SIGINT)
-    keypad(stdscr, true); // Numpad is numbers
+
 #if !(defined TILES || defined _WIN32 || defined WINDOWS)
     // For tiles or windows, this is handled already in initscr().
     init_colors();
@@ -382,7 +417,7 @@ int main(int argc, char *argv[])
     // curs_set(0); // Invisible cursor
     set_escdelay(10); // Make escape actually responsive
 
-    std::srand(seed);
+    srand(seed);
 
     g = new game;
     // First load and initialize everything that does not
@@ -395,19 +430,13 @@ int main(int argc, char *argv[])
             }
             exit_handler(0);
         }
-        if (check_all_mods) {
-            // Here we load all the mods and check their
-            // consistency (both is done in check_all_mod_data).
-            g->init_ui();
-            popup_nowait("checking all mods");
-            g->check_all_mod_data();
-            if(g->game_error()) {
-                exit_handler(-999);
-            }
-            // At this stage, the mods (and core game data)
-            // are find and we could start playing, but this
-            // is only for verifying that stage, so we exit.
-            exit_handler(0);
+        if( !dump.empty() ) {
+            init_colors();
+            exit( g->dump_stats( dump, dmode, opts ) ? 0 : 1 );
+        }
+        if( check_mods ) {
+            init_colors();
+            exit( g->check_mod_data( opts ) && !test_dirty ? 0 : 1 );
         }
     } catch( const std::exception &err ) {
         debugmsg( "%s", err.what() );
@@ -499,16 +528,6 @@ void exit_handler(int s)
     if (s != 2 || query_yn(_("Really Quit? All unsaved changes will be lost."))) {
         erase(); // Clear screen
 
-        int ret;
-#if (defined _WIN32 || defined WINDOWS)
-        ret = system("cls"); // Tell the terminal to clear itself
-        ret = system("color 07");
-#else
-        ret = system("clear"); // Tell the terminal to clear itself
-#endif
-        if (ret != 0) {
-            DebugLog( D_ERROR, DC_ALL ) << "system(\"clear\"): error returned: " << ret;
-        }
         deinitDebug();
 
         int exit_status = 0;

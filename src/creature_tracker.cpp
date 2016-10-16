@@ -1,8 +1,10 @@
 #include "creature_tracker.h"
+#include "pathfinding.h"
 #include "monster.h"
 #include "mongroup.h"
 #include "debug.h"
 #include "mtype.h"
+#include "item.h"
 
 Creature_tracker::Creature_tracker()
 {
@@ -46,6 +48,11 @@ int Creature_tracker::mon_at( const tripoint &coords ) const
 bool Creature_tracker::add( monster &critter )
 {
     if( critter.type->id == NULL_ID ) { // Don't wanna spawn null monsters o.O
+        return false;
+    }
+
+    if( critter.type->has_flag( MF_VERMIN ) ) {
+        // Don't spawn vermin, they aren't implemented yet
         return false;
     }
 
@@ -130,7 +137,7 @@ bool Creature_tracker::update_pos( const monster &critter, const tripoint &new_p
 
 void Creature_tracker::remove_from_location_map( const monster &critter )
 {
-    const tripoint &loc = critter.pos3();
+    const tripoint &loc = critter.pos();
     const auto pos_iter = monsters_by_location.find( loc );
     if( pos_iter != monsters_by_location.end() ) {
         const auto &other = find( pos_iter->second );
@@ -176,7 +183,7 @@ void Creature_tracker::rebuild_cache()
     monsters_by_location.clear();
     for( size_t i = 0; i < monsters_list.size(); i++ ) {
         monster &critter = *monsters_list[i];
-        monsters_by_location[critter.pos3()] = i;
+        monsters_by_location[critter.pos()] = i;
     }
 }
 

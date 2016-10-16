@@ -3,10 +3,30 @@
 
 #include <string>
 
-// Convert minutes, hours, days to turns
-#define MINUTES(x) ((x) * 10)
-#define HOURS(x)   ((x) * 600)
-#define DAYS(x)    ((x) * 14400)
+constexpr int MOVES( int n )
+{
+    return n * 100;
+}
+
+constexpr int SECONDS( int n )
+{
+    return n / 6;
+}
+
+constexpr int MINUTES( int n )
+{
+    return n * 10;
+}
+
+constexpr int HOURS( int n )
+{
+    return n * MINUTES( 60 );
+}
+
+constexpr int DAYS( int n )
+{
+    return n * HOURS( 24 );
+}
 
 // How much light the moon provides per quater
 #define MOONLIGHT_PER_QUATER 2.25
@@ -54,25 +74,25 @@ class calendar
     public:
         /** Initializers */
         calendar();
-        calendar(const calendar &copy) = default;
-        calendar(int Minute, int Hour, int Day, season_type Season, int Year);
-        calendar(int turn);
+        calendar( const calendar &copy ) = default;
+        calendar( int Minute, int Hour, int Day, season_type Season, int Year );
+        calendar( int turn );
         /** Returns the current turn_number. */
         int get_turn() const;
         operator int() const; // Returns get_turn() for backwards compatibility
         /** Basic calendar operators. Usually modifies or checks the turn_number of the calendar */
-        calendar &operator = (const calendar &rhs) = default;
-        calendar &operator = (int rhs);
-        calendar &operator -=(const calendar &rhs);
-        calendar &operator -=(int rhs);
-        calendar &operator +=(const calendar &rhs);
-        calendar &operator +=(int rhs);
-        calendar  operator - (const calendar &rhs) const;
-        calendar  operator - (int rhs) const;
-        calendar  operator + (const calendar &rhs) const;
-        calendar  operator + (int rhs) const;
-        bool      operator ==(int rhs) const;
-        bool      operator ==(const calendar &rhs) const;
+        calendar &operator = ( const calendar &rhs ) = default;
+        calendar &operator = ( int rhs );
+        calendar &operator -=( const calendar &rhs );
+        calendar &operator -=( int rhs );
+        calendar &operator +=( const calendar &rhs );
+        calendar &operator +=( int rhs );
+        calendar  operator - ( const calendar &rhs ) const;
+        calendar  operator - ( int rhs ) const;
+        calendar  operator + ( const calendar &rhs ) const;
+        calendar  operator + ( int rhs ) const;
+        bool      operator ==( int rhs ) const;
+        bool      operator ==( const calendar &rhs ) const;
 
         /** Increases turn_number by 1. (6 seconds) */
         void increment();
@@ -94,69 +114,60 @@ class calendar
         float sunlight() const;
 
         /** Basic accessors */
-        int seconds() const
-        {
+        int seconds() const {
             return second;
         }
-        int minutes() const
-        {
+        int minutes() const {
             return minute;
         }
-        int hours() const
-        {
+        int hours() const {
             return hour;
         }
-        int days() const
-        {
+        int days() const {
             return day;
         }
-        season_type get_season() const
-        {
+        season_type get_season() const {
             return season;
         }
-        int years() const
-        {
+        int years() const {
             return year;
         }
 
         /**
          * Predicate to handle rate-limiting, returns true once every @event_frequency turns.
          */
-        static bool once_every(int event_frequency);
+        static bool once_every( int event_frequency );
 
-        // Season and year length stuff
-    private:
-        // cached value from world options
-        static int cached_season_length;
     public:
-        // to be called from option handling when the options of the active world change.
-        static void set_season_length( int new_length );
-        static int year_turns()
-        {
-            return DAYS(year_length());
+        // Used for durations
+        static const int INDEFINITELY_LONG;
+
+        static int year_turns() {
+            return DAYS( year_length() );
         }
-        static int year_length() // In days
-        {
+        static int year_length() { // In days
             return season_length() * 4;
+        }
+        static int season_turns() {
+            return DAYS( season_length() );
         }
         static int season_length(); // In days
 
-        static float season_ratio() //returns relative length of game season to irl season
-        {
-            return static_cast<float>(season_length()) / REAL_WORLD_SEASON_LENGTH;
+        static float season_ratio() { //returns relative length of game season to irl season
+            return static_cast<float>( season_length() ) / REAL_WORLD_SEASON_LENGTH;
         }
 
-        int turn_of_year() const
-        {
-            return turn_number % year_turns();
-        }
-        int day_of_year() const
-        {
-            return day + season_length() * season;
-        }
+        int turn_of_year() const;
+
+        int day_of_year() const;
+
+        /** Returns the remaining time (in turns) before the specified diurnal time (in turns) */
+        int diurnal_time_before( int turn ) const;
+
+        static std::string print_duration( int turns );
 
         /** Returns the current time in a string according to the options set */
-        std::string print_time(bool just_hour = false) const;
+        std::string print_time( bool just_hour = false ) const;
         /** Returns the period a calendar has been running in word form; i.e. "1 second", "2 days". */
         std::string textify_period() const;
         /** Returns the name of the current day of the week */
@@ -167,4 +178,5 @@ class calendar
         static season_type initial_season;
         static bool eternal_season;
 };
+
 #endif

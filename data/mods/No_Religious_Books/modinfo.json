@@ -3,10 +3,10 @@
     "type": "MOD_INFO",
     "mod-type": "SUPPLEMENTAL",
     "ident": "no_religious_Texts",
-    "name": "Disable religious texts",
+    "name": "Disable Religious Texts",
     "author": "dvolk",
     "description": "Removes religious text items from the game.",
-    "category": "exclude",
+    "category": "item_exclude",
     "path": "modinfo.json"
   },{
     "type": "ITEM_BLACKLIST",
@@ -29,7 +29,6 @@
         "holybook_slack",
         "holybook_kallisti",
         "holybook_scientology"
-
     ]
   }
 ]

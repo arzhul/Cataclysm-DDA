@@ -6,10 +6,14 @@
 
 #include "json.h"
 #include "enums.h"
+#include "omdata.h"
 
 #include <map>
 #include <vector>
 #include <string>
+
+class ammunition_type;
+using ammotype = string_id<ammunition_type>;
 
 class item;
 
@@ -67,13 +71,18 @@ class uistatedata : public JsonSerializer, public JsonDeserializer
         bool list_item_priority_active = false;
         bool list_item_init = false;
 
+        // overmap editor selections
+        const oter_t *place_terrain = nullptr;
+        const overmap_special *place_special = nullptr;
+        int omedit_rotation = 0;
+
         /* to save input history and make accessible via 'up', you don't need to edit this file, just run:
            output = string_input_popup(str, int, str, str, std::string("set_a_unique_identifier_here") );
         */
 
         std::map<std::string, std::vector<std::string>> input_history;
 
-        std::map<std::string, std::string> lastreload; // last typeid used when reloading ammotype
+        std::map<ammotype, itype_id> lastreload; // id of ammo last used when reloading ammotype
 
         // internal stuff
         bool _testing_save = true; // internal: whine on json errors. set false if no complaints in 2 weeks.

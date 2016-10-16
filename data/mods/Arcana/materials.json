@@ -23,7 +23,7 @@
         "//" : "identical save for acid resistance",
         "ident" : "wyrmskin",
         "name" : "Wyrmskin",
-        "salvage_id": "leather",
+        "salvaged_into" : "leather",
         "bash_resist" : 2,
         "cut_resist" : 2,
         "bash_dmg_verb" : "ripped",
@@ -34,7 +34,7 @@
             "shredded",
             "tattered"
         ],
-        "acid_resist" : 10,
+        "acid_resist" : 36,
         "elec_resist" : 2,
         "fire_resist" : 2,
         "chip_resist" : 10,
